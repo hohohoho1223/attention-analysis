@@ -17,7 +17,7 @@ class AttentionConfig:
     distracted_time: float = 3.0
     lost_focus_time: float = 5.0
     no_face_time: float = 5.0
-    smoothing_alpha: float = 0.35
+    smoothing_alpha: float = 0.35 # 스무딩 가중치 0.35(0.0 ~ 1.0)로 설정-> 현재 측정값이 35%, 이전 측정값 65% 반영
     recovery_speed: float = 1.5
 
 
