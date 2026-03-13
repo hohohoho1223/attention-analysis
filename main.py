@@ -6,7 +6,7 @@ from typing import Optional
 import mediapipe as mp
 from attention_logic import AttentionAnalyzer, AttentionConfig, DEFAULT_ATTENTION_CONFIG
 from head_pose import HeadPoseEstimator, PoseAngles
-from upperbody_pose import UpperBodyAnalyzer, UpperBodyState
+from upperbody_pose import UPPER_BODY_LANDMARKS, UpperBodyAnalyzer, UpperBodyState
 
 
 try:
@@ -162,30 +162,31 @@ class VideoFaceAnalyzer:
                 frame.shape[1],
                 frame.shape[0],
             )
-            if self.draw_upper_body_indices:
-                frame_h, frame_w = frame.shape[:2]
-                upper_points = {
-                    "L_shoulder": 11,
-                    "R_shoulder": 12,
-                    "L_elbow": 13,
-                    "R_elbow": 14,
-                }
+        else:
+            self.upper_body_state = UpperBodyState()
 
-                for name, idx in upper_points.items():
-                    lm = pose_results.pose_landmarks.landmark[idx]
-                    x = int(lm.x * frame_w)
-                    y = int(lm.y * frame_h)
+        if self.draw_upper_body_indices and self.upper_body_state.body_visible:
+            display_names = {
+                "left_shoulder": "L_shoulder",
+                "right_shoulder": "R_shoulder",
+                "left_elbow": "L_elbow",
+                "right_elbow": "R_elbow",
+            }
 
-                    cv2.circle(frame, (x, y), 5, (255, 0, 0), -1)
-                    cv2.putText(
-                        frame,
-                        f"{name}:{idx}",
-                        (x + 6, y - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.45,
-                        (255, 255, 0),
-                        1,
-                    )
+            for name, (x, y) in self.upper_body_state.landmark_points.items():
+                idx = UPPER_BODY_LANDMARKS[name]
+                label = display_names[name]
+
+                cv2.circle(frame, (x, y), 5, (255, 0, 0), -1)
+                cv2.putText(
+                    frame,
+                    f"{label}:{idx}",
+                    (x + 6, y - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    (255, 255, 0),
+                    1,
+                )
 
 
         if results.multi_face_landmarks:

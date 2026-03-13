@@ -1,10 +1,22 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
 import math
+from dataclasses import dataclass, field
+
+
+UPPER_BODY_LANDMARKS = {
+    "left_shoulder": 11,
+    "right_shoulder": 12,
+    "left_elbow": 13,
+    "right_elbow": 14,
+}
+
 
 @dataclass
 class UpperBodyState:
     shoulder_tilt: float = 0.0
     body_visible: bool = False
+    landmark_points: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
 class UpperBodyAnalyzer:
@@ -13,25 +25,55 @@ class UpperBodyAnalyzer:
     Uses shoulder landmarks (11, 12) to estimate body tilt.
     """
 
-    LEFT_SHOULDER = 11 # MediaPipe Pose에서 왼쪽 어깨 랜드마크 인덱스
-    RIGHT_SHOULDER = 12 # MediaPipe Pose에서 오른쪽 어깨 랜드마크 인덱스
+    def _extract_landmark_points(
+        self,
+        pose_landmarks,
+        frame_width: int,
+        frame_height: int,
+    ) -> dict[str, tuple[int, int]]:
+        points: dict[str, tuple[int, int]] = {}
 
-    def estimate(self, pose_landmarks, frame_width: int, frame_height: int) -> UpperBodyState:
-        if pose_landmarks is None:
-            return UpperBodyState(shoulder_tilt=0.0, body_visible=False)
+        for name, idx in UPPER_BODY_LANDMARKS.items():
+            landmark = pose_landmarks.landmark[idx]
+            x = int(landmark.x * frame_width)
+            y = int(landmark.y * frame_height)
+            points[name] = (x, y)
 
-        l = pose_landmarks.landmark[self.LEFT_SHOULDER]
-        r = pose_landmarks.landmark[self.RIGHT_SHOULDER]
+        return points
 
-        x1, y1 = l.x * frame_width, l.y * frame_height
-        x2, y2 = r.x * frame_width, r.y * frame_height
+    def _calculate_shoulder_tilt(
+        self,
+        points: dict[str, tuple[int, int]],
+    ) -> float:
+        left_shoulder = points["left_shoulder"]
+        right_shoulder = points["right_shoulder"]
+
+        x1, y1 = left_shoulder
+        x2, y2 = right_shoulder
 
         dx = x2 - x1
         dy = y2 - y1
 
-        angle = math.degrees(math.atan2(dy, dx))
+        return math.degrees(math.atan2(dy, dx))
+
+    def estimate(
+        self,
+        pose_landmarks,
+        frame_width: int,
+        frame_height: int,
+    ) -> UpperBodyState:
+        if pose_landmarks is None:
+            return UpperBodyState()
+
+        points = self._extract_landmark_points(
+            pose_landmarks,
+            frame_width,
+            frame_height,
+        )
+        shoulder_tilt = self._calculate_shoulder_tilt(points)
 
         return UpperBodyState(
-            shoulder_tilt=angle,
+            shoulder_tilt=shoulder_tilt,
             body_visible=True,
+            landmark_points=points,
         )
