@@ -5,10 +5,10 @@ from dataclasses import dataclass, field
 
 
 UPPER_BODY_LANDMARKS = {
-    "left_shoulder": 11,
-    "right_shoulder": 12,
-    "left_elbow": 13,
-    "right_elbow": 14,
+    "left_shoulder": 11, # MediaPipe Pose에서 왼쪽 어깨 랜드마크 인덱스
+    "right_shoulder": 12, # MediaPipe Pose에서 오른쪽 어깨 랜드마크 인덱스
+    "left_elbow": 13, # MediaPipe Pose에서 왼쪽 팔꿈치 랜드마크 인덱스
+    "right_elbow": 14, # MediaPipe Pose에서 오른쪽 팔꿈치 랜드마크 인덱스
 }
 
 
