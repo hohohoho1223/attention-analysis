@@ -1,1 +1,48 @@
-__pycache__
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# MacOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model weights
+*.pth
+*.pt
+*.onnx
+
+# Dataset
+data/
+datasets/
+videos/
+
+# Output
+output/
+results/
+
+# MediaPipe cache
+*.pbtxt
