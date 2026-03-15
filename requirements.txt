@@ -1,5 +1,11 @@
-mediapipe==0.10.14
 numpy==1.26.4
+pandas
 opencv-python 
 scipy
-pandas
+
+#mediapipe
+mediapipe==0.10.14
+
+#ML
+xgboost
+scikit-learn

@@ -1,5 +1,6 @@
 import pandas as pd
 from features.run_feature_extract import run_feature_extract
+from ml.train_ml import train
 
 if __name__ == "__main__":
 
@@ -9,4 +10,5 @@ if __name__ == "__main__":
     # 저장된 feature 불러오기
     df = pd.read_csv('./features.csv')
     
-    # 모델 로드
+    # 모델 학습
+    train()
