@@ -34,7 +34,7 @@ class AttentionState:
     smoothed_yaw: float = 0.0
     smoothed_pitch: float = 0.0
     smoothed_roll: float = 0.0
-
+    smoothed_body_tilt: float = 0.0
 
 class AttentionAnalyzer:
     def __init__(
@@ -52,6 +52,12 @@ class AttentionAnalyzer:
         self.state.smoothed_yaw = self._smooth_value(self.state.smoothed_yaw, pose_angles.yaw)
         self.state.smoothed_pitch = self._smooth_value(self.state.smoothed_pitch, pose_angles.pitch)
         self.state.smoothed_roll = self._smooth_value(self.state.smoothed_roll, pose_angles.roll)
+    
+    def _smooth_body_tilt(self, body_tilt: float) -> None:
+        self.state.smoothed_body_tilt = self._smooth_value(
+        self.state.smoothed_body_tilt,
+        body_tilt,
+    )
 
     def _is_focused_range(self) -> bool:
         return (
@@ -80,13 +86,27 @@ class AttentionAnalyzer:
             )
 
     def _calculate_score(self) -> float:
+
         yaw_penalty = min(abs(self.state.smoothed_yaw) / max(self.config.yaw_threshold, 1e-6), 2.0) * 25.0
         pitch_penalty = min(abs(self.state.smoothed_pitch) / max(self.config.pitch_threshold, 1e-6), 2.0) * 20.0
         roll_penalty = min(abs(self.state.smoothed_roll) / max(self.config.roll_threshold, 1e-6), 2.0) * 10.0
+
+        # 몸 기울기 패널티 추가: 몸이 많이 기울어질수록 패널티 증가 (최대 15점)
+        body_penalty = min(abs(self.state.smoothed_body_tilt) / 30.0, 2.0) * 15.0
+
         duration_penalty = min(self.state.distracted_duration, 5.0) * 8.0
         no_face_penalty = min(self.state.no_face_duration, 3.0) * 12.0
 
-        score = 100.0 - yaw_penalty - pitch_penalty - roll_penalty - duration_penalty - no_face_penalty
+        score = (
+            100.0
+            - yaw_penalty
+            - pitch_penalty
+            - roll_penalty
+            - body_penalty
+            - duration_penalty
+            - no_face_penalty
+        )
+
         return max(0.0, min(100.0, score))
 
     def _update_state_label(self) -> None:
@@ -109,12 +129,15 @@ class AttentionAnalyzer:
         self.state.state = "FOCUSED"
 
     # 업데이트 메서드: 얼굴 감지 여부와 각도 정보를 받아 상태를 업데이트하고, 최종적으로 현재 상태를 반환
-    def update(self, pose_angles: PoseAngles, face_detected: bool, dt: float) -> AttentionState:
+    def update(self, pose_angles: PoseAngles, body_tilt: float, face_detected: bool, dt: float) -> AttentionState:
         self.state.face_detected = face_detected
 
         if face_detected:
             self.state.no_face_duration = 0.0
+            
             self._smooth_pose(pose_angles)
+            self._smooth_body_tilt(body_tilt)
+
             self._update_distracted_duration(dt)
         else:
             self.state.no_face_duration += dt

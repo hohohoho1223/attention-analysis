@@ -304,9 +304,10 @@ class VideoFaceAnalyzer:
         output = self.draw_mediapipe(frame)
 
         attention_state = self.attention_analyzer.update(
-            pose_angles=self.pose_angles,
-            face_detected=self.face_detected,
-            dt=1.0 / max(self.fps, 1e-6),
+        pose_angles=self.pose_angles,
+        body_tilt=self.upper_body_state.shoulder_tilt,
+        face_detected=self.face_detected,
+        dt=1.0 / max(self.fps, 1e-6),
         )
 
         cv2.putText(
