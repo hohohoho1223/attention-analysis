@@ -325,8 +325,8 @@ class VideoFaceAnalyzer:
         cv2.putText(
             output,
             (
-                f"Distracted: {attention_state.distracted_duration:.1f}s | "
-                f"NoFace: {attention_state.no_face_duration:.1f}s"
+                f"Head: {attention_state.head_duration:.1f}s | "
+                f"Body: {attention_state.body_duration:.1f}s"
             ),
             (10, 130),
             cv2.FONT_HERSHEY_SIMPLEX,
