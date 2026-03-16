@@ -28,14 +28,14 @@ DEFAULT_ATTENTION_CONFIG = AttentionConfig()
 class AttentionState:
     state: str = "FOCUSED"
     score: float = 100.0
-    distracted_duration: float = 0.0 # 집중 저하 지속 시간
+    head_duration: float = 0.0  # 고개 기반 집중 저하 지속 시간
+    body_duration: float = 0.0  # 몸 기울기 기반 집중 저하 지속 시간
     no_face_duration: float = 0.0 # 얼굴 미검출 지속 시간
     face_detected: bool = False
     smoothed_yaw: float = 0.0
     smoothed_pitch: float = 0.0
     smoothed_roll: float = 0.0
     smoothed_body_tilt: float = 0.0
-    body_tilt_duration: float = 0.0
 
 class AttentionAnalyzer:
     def __init__(
@@ -79,21 +79,22 @@ class AttentionAnalyzer:
         head_warning_event = self._is_over_threshold()
         body_warning_event = abs(self.state.smoothed_body_tilt) > 20.0
 
-        if head_warning_event or body_warning_event:
-            self.state.distracted_duration += dt
+        # head duration tracking
+        if head_warning_event:
+            self.state.head_duration += dt
         elif self._is_focused_range():
-            self.state.distracted_duration = max(
+            self.state.head_duration = max(
                 0.0,
-                self.state.distracted_duration - dt * self.config.recovery_speed,
+                self.state.head_duration - dt * self.config.recovery_speed,
             )
 
-        # body tilt duration tracking
+        # body duration tracking
         if body_warning_event:
-            self.state.body_tilt_duration += dt
+            self.state.body_duration += dt
         else:
-            self.state.body_tilt_duration = max(
+            self.state.body_duration = max(
                 0.0,
-                self.state.body_tilt_duration - dt * self.config.recovery_speed,
+                self.state.body_duration - dt * self.config.recovery_speed,
             )
 
     def _calculate_score(self) -> float:
@@ -103,11 +104,14 @@ class AttentionAnalyzer:
         roll_penalty = min(abs(self.state.smoothed_roll) / max(self.config.roll_threshold, 1e-6), 2.0) * 10.0
 
         # 몸 기울기 패널티: 기울기 상태가 얼마나 오래 지속되는지에 따라 증가
-        body_penalty = min(self.state.body_tilt_duration, 3.0) * 5.0
+        body_penalty = min(self.state.body_duration, 3.0) * 5.0
 
-        duration_penalty = min(self.state.distracted_duration, 5.0) * 8.0
+        # 지속 시간 패널티: 고개와 몸의 집중 저하 지속 시간 중 더 긴 쪽을 기준으로 패널티 계산, 최대 5초까지 패널티 적용
+        combined_duration = max(self.state.head_duration, self.state.body_duration)
+        duration_penalty = min(combined_duration, 5.0) * 8.0
         no_face_penalty = min(self.state.no_face_duration, 3.0) * 12.0
 
+        # 100점에서 각 패널티를 차감하여 최종 점수 계산, 점수는 0에서 100 사이로 제한
         score = (
             100.0
             - yaw_penalty
@@ -125,15 +129,17 @@ class AttentionAnalyzer:
             self.state.state = "LOST_FOCUS"
             return
 
-        if self.state.distracted_duration >= self.config.lost_focus_time:
+        combined_duration = max(self.state.head_duration, self.state.body_duration)
+
+        if combined_duration >= self.config.lost_focus_time:
             self.state.state = "LOST_FOCUS"
             return
 
-        if self.state.distracted_duration >= self.config.distracted_time:
+        if combined_duration >= self.config.distracted_time:
             self.state.state = "DISTRACTED"
             return
 
-        if self.state.distracted_duration >= self.config.minor_distraction_time:
+        if combined_duration >= self.config.minor_distraction_time:
             self.state.state = "MINOR_DISTRACTION"
             return
 
@@ -152,7 +158,8 @@ class AttentionAnalyzer:
             self._update_distracted_duration(dt)
         else:
             self.state.no_face_duration += dt
-            self.state.distracted_duration += dt
+            self.state.head_duration += dt
+            self.state.body_duration += dt
 
         self.state.score = self._calculate_score()
         self._update_state_label()
