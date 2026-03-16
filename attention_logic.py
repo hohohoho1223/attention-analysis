@@ -35,6 +35,7 @@ class AttentionState:
     smoothed_pitch: float = 0.0
     smoothed_roll: float = 0.0
     smoothed_body_tilt: float = 0.0
+    body_tilt_duration: float = 0.0
 
 class AttentionAnalyzer:
     def __init__(
@@ -75,14 +76,24 @@ class AttentionAnalyzer:
 
     # 집중 저하 지속 시간 업데이트: 얼굴이 감지되고, 일정 각도 이상으로 고개가 돌아간 경우 지속 시간 증가, 그렇지 않고 집중 범위에 있으면 지속 시간 감소
     def _update_distracted_duration(self, dt: float) -> None:
-        if self._is_over_threshold():
-            self.state.distracted_duration += dt
-            return
+        head_warning_event = self._is_over_threshold()
+        body_warning_event = abs(self.state.smoothed_body_tilt) > 20.0
 
-        if self._is_focused_range():
+        if head_warning_event or body_warning_event:
+            self.state.distracted_duration += dt
+        elif self._is_focused_range():
             self.state.distracted_duration = max(
                 0.0,
                 self.state.distracted_duration - dt * self.config.recovery_speed,
+            )
+
+        # body tilt duration tracking
+        if body_warning_event:
+            self.state.body_tilt_duration += dt
+        else:
+            self.state.body_tilt_duration = max(
+                0.0,
+                self.state.body_tilt_duration - dt * self.config.recovery_speed,
             )
 
     def _calculate_score(self) -> float:
@@ -91,8 +102,8 @@ class AttentionAnalyzer:
         pitch_penalty = min(abs(self.state.smoothed_pitch) / max(self.config.pitch_threshold, 1e-6), 2.0) * 20.0
         roll_penalty = min(abs(self.state.smoothed_roll) / max(self.config.roll_threshold, 1e-6), 2.0) * 10.0
 
-        # 몸 기울기 패널티 추가: 몸이 많이 기울어질수록 패널티 증가 (최대 15점)
-        body_penalty = min(abs(self.state.smoothed_body_tilt) / 30.0, 2.0) * 15.0
+        # 몸 기울기 패널티: 기울기 상태가 얼마나 오래 지속되는지에 따라 증가
+        body_penalty = min(self.state.body_tilt_duration, 3.0) * 5.0
 
         duration_penalty = min(self.state.distracted_duration, 5.0) * 8.0
         no_face_penalty = min(self.state.no_face_duration, 3.0) * 12.0
