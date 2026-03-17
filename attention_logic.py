@@ -103,7 +103,7 @@ class AttentionAnalyzer:
         pitch_penalty = min(abs(self.state.smoothed_pitch) / max(self.config.pitch_threshold, 1e-6), 2.0) * 20.0
         roll_penalty = min(abs(self.state.smoothed_roll) / max(self.config.roll_threshold, 1e-6), 2.0) * 10.0
 
-        # 몸 기울기 패널티: 기울기 상태가 얼마나 오래 지속되는지에 따라 증가
+        # 몸 기울기 패널티: 기울기 상태가 얼마나 오래 지속되는지에 따라 증가(최대 3초까지 패널티 적용), 패널티는 최대 (3.0*5.0)15점까지 적용
         body_penalty = min(self.state.body_duration, 3.0) * 5.0
 
         # 지속 시간 패널티: 고개와 몸의 집중 저하 지속 시간 중 더 긴 쪽을 기준으로 패널티 계산, 최대 5초까지 패널티 적용

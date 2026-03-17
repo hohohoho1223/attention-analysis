@@ -54,7 +54,17 @@ class UpperBodyAnalyzer:
         dx = x2 - x1
         dy = y2 - y1
 
-        return math.degrees(math.atan2(dy, dx))
+        angle = math.degrees(math.atan2(dy, dx))
+
+        # Normalize to [-90, 90] so horizontal shoulders are near 0 degrees.
+        # Without this, a nearly horizontal line can appear as ±180 degrees
+        # depending on landmark ordering.
+        if angle > 90.0:
+            angle -= 180.0
+        elif angle < -90.0:
+            angle += 180.0
+
+        return angle
 
     def estimate(
         self,
