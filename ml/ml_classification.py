@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from xgboost.sklearn import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
 
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_curve, auc
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_curve, auc, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.preprocessing import label_binarize
 
 
@@ -111,7 +111,9 @@ class ML_classification():
     
     
     fig = self.plot_roc_curve_all([xgb,rf_clf],training_data['X_test'],training_data['Y_test'])
-    return(temp, fig)
+    fig_cm  = self.plot_confusion_matrix([xgb, rf_clf], training_data['X_test'], training_data['Y_test'])
+
+    return(temp, fig, fig_cm)
 
   def roc_values(self, y_score,y_test,n_classes):
 
@@ -241,3 +243,19 @@ class ML_classification():
     plt.legend(loc="lower right")
     plt.show()
     return fig
+  
+  def plot_confusion_matrix(self, model_list, X_test, Y_test):
+      fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+      labels = ['Unfocus', 'Partial', 'Focus']
+      names = ['XGBoost', 'Random Forest']
+      
+      for i, (model, ax) in enumerate(zip(model_list, axes)):
+          predicted = model.predict(X_test)
+          cm = confusion_matrix(Y_test, predicted)
+          disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+          disp.plot(ax=ax)
+          ax.set_title(names[i])
+      
+      plt.tight_layout()
+      plt.show()
+      return fig

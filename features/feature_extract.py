@@ -59,7 +59,7 @@ def faceMesh_extract(file_path,draw=True):
         if results.multi_face_landmarks:
             for face_landmarks in results.multi_face_landmarks:
                 if draw == True:
-                    mp_drawing.draw_landmarks(image, face_landmarks,mp_face_mesh.FACEMESH_CONTOURS, mp_drawing_spec, mp_drawing_spec)
+                    mp_drawing.draw_landmarks(image, face_landmarks,mp_face_mesh.FACEMESH_TESSELATION, mp_drawing_spec, mp_drawing_spec)
 
                 # landmark 추출 (faceMesh)
                 for _, lm in enumerate(face_landmarks.landmark):

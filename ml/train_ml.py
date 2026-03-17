@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import joblib
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.utils import resample
@@ -10,6 +11,7 @@ def scalingDF(df):
     # scaler = QuantileTransformer(output_distribution='normal')
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(df)
+    joblib.dump(scaler, './ml/trained_models/scaler.joblib') 
     df_s = pd.DataFrame(scaled,index=df.index, columns=df.columns)
     return df_s
 
@@ -45,19 +47,22 @@ def train():
 
     dfML_result=[]
     roc_plot=[]
+    cm_plot=[]
 
     path_trainedmodel = "./ml/trained_models"
 
     #train the feature sets with our classifiction models
     for i in range(4):
-        temp , plot= obj.classifier_result(training_data[i],i,path_trainedmodel)
+        temp , plot, plot_cm= obj.classifier_result(training_data[i],i,path_trainedmodel)
         print(temp)
         #save the result in dfML_result dataframe
         dfML_result.append(pd.DataFrame(temp,columns=["model","Accuracy","Precision","Recall","F-measure"],index=["XGBoost", "Random forest"]).round(decimals=2))
         roc_plot.append(plot)
+        cm_plot.append(plot_cm)
 
     #save the results and the plots
     os.makedirs('./ml/results', exist_ok=True)
     for i in range(4):
         dfML_result[i].to_csv(f'./ml/results/result_s{i}.csv')
         roc_plot[i].savefig(f'./ml/results/roc_plot_s{i}.pdf')
+        cm_plot[i].savefig(f'./ml/results/cm_plot_s{i}.pdf')
