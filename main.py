@@ -5,6 +5,7 @@ from typing import Optional
 
 import mediapipe as mp
 from attention_logic import AttentionAnalyzer, AttentionConfig, DEFAULT_ATTENTION_CONFIG
+from eye_focus import EyeFocusAnalyzer
 from head_pose import HeadPoseEstimator, PoseAngles
 from upperbody_pose import UPPER_BODY_LANDMARKS, UpperBodyAnalyzer, UpperBodyState
 
@@ -37,7 +38,7 @@ class VideoFaceAnalyzer:
         max_num_faces: int = 1, # 최대 1명 인식
         detection_confidence: float = 0.5,
         tracking_confidence: float = 0.5,
-        refine_landmarks: bool = False,
+        refine_landmarks: bool = True,
         process_scale: float = 0.75,
         draw_tesselation: bool = False,
         draw_head_pose_indices: bool = False,
@@ -74,6 +75,10 @@ class VideoFaceAnalyzer:
         self.current_frame_idx = -1
         self.pose_angles = PoseAngles()
         self.face_detected = False
+        self.gaze_direction = "Unknown"
+        self.blink_bpm = 0
+        self.eye_focus_score = 100.0
+        self.eye_status_msg = "Eye analysis disabled"
 
         if self.save_path:
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -104,6 +109,7 @@ class VideoFaceAnalyzer:
         )
 
         self.attention_analyzer = AttentionAnalyzer(config=self.attention_config)
+        self.eye_focus_analyzer = EyeFocusAnalyzer()
 
     def _update_head_pose_state(self, face_landmarks, frame) -> None:
         frame_height, frame_width = frame.shape[:2]
@@ -193,6 +199,13 @@ class VideoFaceAnalyzer:
             for face_landmarks in results.multi_face_landmarks:
                 self._update_head_pose_state(face_landmarks, frame)
 
+                # 얼굴 있을 때 eye 분석 연동
+                eye_result = self.eye_focus_analyzer.analyze(frame, face_landmarks)
+                self.gaze_direction = eye_result.gaze_direction
+                self.blink_bpm = eye_result.blink_bpm
+                self.eye_focus_score = eye_result.eye_focus_score
+                self.eye_status_msg = eye_result.eye_status_msg
+
                 if self.draw_head_pose_indices:
                     self._draw_head_pose_landmark_indices(frame, face_landmarks)
 
@@ -245,6 +258,14 @@ class VideoFaceAnalyzer:
         else:
             self.pose_angles = PoseAngles()
             self.face_detected = False
+
+            # 얼굴 없을 때 eye 상태 리셋 연동
+            eye_result = self.eye_focus_analyzer.analyze(frame, None)
+            self.gaze_direction = eye_result.gaze_direction
+            self.blink_bpm = eye_result.blink_bpm
+            self.eye_focus_score = eye_result.eye_focus_score
+            self.eye_status_msg = eye_result.eye_status_msg
+
             cv2.putText(
                 frame,
                 f"MediaPipe Face Mesh | no face | scale: {self.process_scale:.2f}",
@@ -308,6 +329,10 @@ class VideoFaceAnalyzer:
         body_tilt=self.upper_body_state.shoulder_tilt,
         face_detected=self.face_detected,
         dt=1.0 / max(self.fps, 1e-6),
+        gaze_direction=self.gaze_direction,
+        blink_bpm=self.blink_bpm,
+        eye_focus_score=self.eye_focus_score,
+        eye_status_msg=self.eye_status_msg,
         )
 
         cv2.putText(
@@ -334,12 +359,34 @@ class VideoFaceAnalyzer:
             (255, 180, 0),
             2,
         )
+        cv2.putText(
+            output,
+            (
+                f"Gaze: {attention_state.gaze_direction} | "
+                f"BPM: {attention_state.blink_bpm} | "
+                f"EyeScore: {attention_state.eye_focus_score:.1f}"
+            ),
+            (10, 220),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (180, 255, 180),
+            2,
+        )
+        cv2.putText(
+            output,
+            f"EyeStatus: {attention_state.eye_status_msg}",
+            (10, 250),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (180, 255, 180),
+            2,
+        )
 
         status_text = "PAUSED" if self.is_paused else "PLAYING"
         cv2.putText(
             output,
             f"{status_text} | fps: {self.fps:.1f} | q: quit | space: pause | a/d: -/+5s | j/l: -/+1s",
-            (10, self.frame_height - 20),
+            (10, self.frame_height - 30),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (255, 255, 255),
@@ -507,7 +554,7 @@ def main() -> None:
         max_num_faces=args.max_num_faces,
         detection_confidence=args.detection_confidence,
         tracking_confidence=args.tracking_confidence,
-        refine_landmarks=args.refine_landmarks,
+        refine_landmarks=True,  # 홍채 포함 정밀 랜드마크 항상 활성화
         process_scale=args.process_scale,
         draw_tesselation=args.draw_tesselation,
         draw_head_pose_indices=args.draw_head_pose_indices,

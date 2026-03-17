@@ -36,6 +36,10 @@ class AttentionState:
     smoothed_pitch: float = 0.0
     smoothed_roll: float = 0.0
     smoothed_body_tilt: float = 0.0
+    gaze_direction: str = "Unknown"
+    blink_bpm: int = 0
+    eye_focus_score: float = 100.0
+    eye_status_msg: str = "Eye analysis disabled"
 
 class AttentionAnalyzer:
     def __init__(
@@ -146,8 +150,22 @@ class AttentionAnalyzer:
         self.state.state = "FOCUSED"
 
     # 업데이트 메서드: 얼굴 감지 여부와 각도 정보를 받아 상태를 업데이트하고, 최종적으로 현재 상태를 반환
-    def update(self, pose_angles: PoseAngles, body_tilt: float, face_detected: bool, dt: float) -> AttentionState:
+    def update(
+        self,
+        pose_angles: PoseAngles,
+        body_tilt: float,
+        face_detected: bool,
+        dt: float,
+        gaze_direction: str = "Unknown",
+        blink_bpm: int = 0,
+        eye_focus_score: float = 100.0,
+        eye_status_msg: str = "Eye analysis disabled",
+    ) -> AttentionState:
         self.state.face_detected = face_detected
+        self.state.gaze_direction = gaze_direction
+        self.state.blink_bpm = blink_bpm
+        self.state.eye_focus_score = eye_focus_score
+        self.state.eye_status_msg = eye_status_msg
 
         if face_detected:
             self.state.no_face_duration = 0.0
