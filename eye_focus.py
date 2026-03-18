@@ -104,7 +104,8 @@ class EyeFocusAnalyzer:
             total_width = eye_x_max - eye_x_min
             if total_width <= 0:
                 return 0.5, 0.0
-
+            
+            # 눈 안에서 홍채가 어디 위치해 있는지
             ratio = (iris_center_x - eye_x_min) / total_width
             return ratio, float(total_width)
         except Exception:
@@ -158,11 +159,12 @@ class EyeFocusAnalyzer:
 
         return len(self.blink_timestamps)
 
+    # 눈(홍채) 좌우 구분
     def _classify_gaze(self, smooth_gaze: float) -> str:
         if smooth_gaze < 0.44:
-            return "Left"
-        if smooth_gaze > 0.62:
             return "Right"
+        if smooth_gaze > 0.62:
+            return "Left"
         return "Center"
 
     def _build_focus_result(
