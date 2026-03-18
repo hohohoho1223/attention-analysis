@@ -553,8 +553,6 @@ def main() -> None:
         focused_yaw_threshold=DEFAULT_RUNTIME_CONFIG.focused_yaw_threshold,
         focused_pitch_threshold=DEFAULT_RUNTIME_CONFIG.focused_pitch_threshold,
         focused_roll_threshold=DEFAULT_RUNTIME_CONFIG.focused_roll_threshold,
-        minor_distraction_time=DEFAULT_RUNTIME_CONFIG.minor_distraction_time,
-        distracted_time=DEFAULT_RUNTIME_CONFIG.distracted_time,
         lost_focus_time=DEFAULT_RUNTIME_CONFIG.lost_focus_time,
         no_face_time=DEFAULT_RUNTIME_CONFIG.no_face_time,
         smoothing_alpha=DEFAULT_RUNTIME_CONFIG.smoothing_alpha,
