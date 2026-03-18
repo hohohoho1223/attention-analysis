@@ -372,6 +372,19 @@ class VideoFaceAnalyzer:
             (180, 255, 180),
             2,
         )
+
+        # screen fixation 상태 표시 (head + gaze 기반 해석)
+        fixation_status = "FIXATED" if self.attention_analyzer._is_screen_fixated() else "NOT FIXATED"
+
+        cv2.putText(
+            output,
+            f"Fixation: {fixation_status}",
+            (10, 280),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            2,
+        )
         cv2.putText(
             output,
             f"EyeStatus: {attention_state.eye_status_msg}",
