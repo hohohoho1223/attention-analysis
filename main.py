@@ -259,12 +259,12 @@ class VideoFaceAnalyzer:
             self.pose_angles = PoseAngles()
             self.face_detected = False
 
-            # 얼굴 없을 때 eye 상태 리셋 연동
-            eye_result = self.eye_focus_analyzer.analyze(frame, None)
-            self.gaze_direction = eye_result.gaze_direction
-            self.blink_bpm = eye_result.blink_bpm
-            self.eye_focus_score = eye_result.eye_focus_score
-            self.eye_status_msg = eye_result.eye_status_msg
+            # 얼굴 없을 때 eye 완전 비활성화 (face dependency 강제)
+            self.eye_focus_analyzer.reset()
+            self.gaze_direction = "Unknown"
+            self.blink_bpm = 0
+            self.eye_focus_score = 0.0
+            self.eye_status_msg = "Face Not Detected (Eye disabled)"
 
             cv2.putText(
                 frame,
