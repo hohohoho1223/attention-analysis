@@ -158,24 +158,36 @@ class AttentionAnalyzer:
         return max(0.0, min(100.0, score))
 
     def _update_state_label(self) -> None:
+        # 1) 얼굴이 일정 시간 이상 검출되지 않으면 ABSENT
         if self.state.no_face_duration >= self.config.no_face_time:
+            self.state.state = "ABSENT"
+            return
+
+        # 얼굴이 아직 돌아오지 않았지만 ABSENT 임계치 전이라면 우선 LOST_FOCUS로 본다.
+        if not self.state.face_detected:
             self.state.state = "LOST_FOCUS"
             return
 
         combined_duration = max(self.state.head_duration, self.state.body_duration)
+        screen_fixated = self._is_screen_fixated()
+        body_unstable = abs(self.state.smoothed_body_tilt) > 20.0
+        eye_degraded = self.state.eye_focus_score < 70.0
 
-        if combined_duration >= self.config.lost_focus_time:
-            self.state.state = "LOST_FOCUS"
+        # 2) 화면 응시가 깨진 상태가 충분히 지속되면 LOST_FOCUS
+        if not screen_fixated:
+            if combined_duration >= self.config.distracted_time:
+                self.state.state = "LOST_FOCUS"
+            else:
+                # 짧은 비응시 구간은 회복/전환 구간으로 보고 PARTIAL_FOCUS로 둔다.
+                self.state.state = "PARTIAL_FOCUS"
             return
 
-        if combined_duration >= self.config.distracted_time:
-            self.state.state = "DISTRACTED"
+        # 3) 화면은 보고 있지만 자세/눈 상태가 불안정하면 PARTIAL_FOCUS
+        if body_unstable or eye_degraded:
+            self.state.state = "PARTIAL_FOCUS"
             return
 
-        if combined_duration >= self.config.minor_distraction_time:
-            self.state.state = "MINOR_DISTRACTION"
-            return
-
+        # 4) 나머지는 FOCUSED
         self.state.state = "FOCUSED"
 
     # 업데이트 메서드: 얼굴 감지 여부와 각도 정보를 받아 상태를 업데이트하고, 최종적으로 현재 상태를 반환
