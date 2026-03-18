@@ -78,9 +78,34 @@ class AttentionAnalyzer:
             or abs(self.state.smoothed_roll) > self.config.roll_threshold
         )
 
+    def _is_screen_fixated(self) -> bool:
+        """머리 방향과 눈 방향을 함께 보고 실제로 화면을 응시 중인지 판단한다.
+
+        - 눈이 중앙이면 기본적으로 화면 응시로 본다.
+        - 고개가 한쪽으로 돌아갔더라도, 눈이 반대 방향으로 보상하면
+          계속 화면(정면)을 응시하는 상황으로 해석한다.
+        """
+        gaze = self.state.gaze_direction
+        yaw = self.state.smoothed_yaw
+
+        if gaze == "Center":
+            return True
+
+        head_left = yaw < -self.config.focused_yaw_threshold
+        head_right = yaw > self.config.focused_yaw_threshold
+        eye_left = gaze == "Right"
+        eye_right = gaze == "Left"
+
+        if head_left and eye_right:
+            return True
+        if head_right and eye_left:
+            return True
+
+        return False
+
     # 집중 저하 지속 시간 업데이트: 얼굴이 감지되고, 일정 각도 이상으로 고개가 돌아간 경우 지속 시간 증가, 그렇지 않고 집중 범위에 있으면 지속 시간 감소
     def _update_distracted_duration(self, dt: float) -> None:
-        head_warning_event = self._is_over_threshold()
+        head_warning_event = self._is_over_threshold() and not self._is_screen_fixated()
         body_warning_event = abs(self.state.smoothed_body_tilt) > 20.0
 
         # head duration tracking
@@ -111,9 +136,11 @@ class AttentionAnalyzer:
         no_face_penalty = min(self.state.no_face_duration, 3.0) * 12.0
 
         # gaze 방향 패널티 (핵심)
+        # 단순히 눈이 Center가 아닌지만 보지 않고,
+        # head pose와 함께 실제 화면 응시(screen fixation) 여부를 해석한다.
         gaze_penalty = 0.0
-        if self.state.gaze_direction != "Center":
-            gaze_penalty = 25.0  # 시선 이탈은 강하게
+        if not self._is_screen_fixated():
+            gaze_penalty = 25.0  # 실제 화면 응시가 아니면 강하게 감점
 
         # eye_focus_score 기반 보조 패널티
         eye_penalty = (100.0 - self.state.eye_focus_score) * 0.2
