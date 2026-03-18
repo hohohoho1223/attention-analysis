@@ -127,33 +127,37 @@ class AttentionAnalyzer:
             )
 
     def _calculate_score(self) -> float:
-        # 몸 기울기 패널티: 기울기 상태가 얼마나 오래 지속되는지에 따라 증가(최대 3초까지 패널티 적용), 패널티는 최대 (3.0*5.0)15점까지 적용
-        body_penalty = min(self.state.body_duration, 3.0) * 5.0
+        """상태(state)를 먼저 해석하고, 그 상태가 얼마나 지속되었는지로 점수를 보정한다.
 
-        # 지속 시간 패널티: 고개와 몸의 집중 저하 지속 시간 중 더 긴 쪽을 기준으로 패널티 계산, 최대 5초까지 패널티 적용
+        철학:
+        - 상태가 먼저다: FOCUSED / PARTIAL_FOCUS / LOST_FOCUS / ABSENT
+        - 지속시간은 같은 상태 안에서 강도를 결정한다.
+        - feature별 즉시 감점 합산보다 상태 기반 해석을 우선한다.
+        """
         combined_duration = max(self.state.head_duration, self.state.body_duration)
-        duration_penalty = min(combined_duration, 5.0) * 8.0
-        no_face_penalty = min(self.state.no_face_duration, 3.0) * 12.0
+        partial_driver = max(self.state.body_duration, 0.0)
+        lost_driver = max(combined_duration, self.state.no_face_duration)
 
-        # gaze 방향 패널티 (핵심)
-        # 단순히 눈이 Center가 아닌지만 보지 않고,
-        # head pose와 함께 실제 화면 응시(screen fixation) 여부를 해석한다.
-        gaze_penalty = 0.0
-        if not self._is_screen_fixated():
-            gaze_penalty = 25.0  # 실제 화면 응시가 아니면 강하게 감점
+        if self.state.state == "ABSENT":
+            # 이탈 상태는 가장 낮은 점수 구간에서 빠르게 0점으로 수렴
+            score = 20.0 - min(self.state.no_face_duration, 3.0) * 7.0
+        elif self.state.state == "LOST_FOCUS":
+            # 화면 응시가 깨진 상태. 지속될수록 55 → 30 정도까지 하락
+            score = 55.0 - min(lost_driver, 5.0) * 5.0
+        elif self.state.state == "PARTIAL_FOCUS":
+            # 화면은 보고 있지만 자세/눈 상태가 불안정한 상태
+            score = 80.0 - min(partial_driver, 4.0) * 3.0
 
-        # eye_focus_score 기반 보조 패널티
-        eye_penalty = (100.0 - self.state.eye_focus_score) * 0.2
-
-        # 100점에서 각 패널티를 차감하여 최종 점수 계산, 점수는 0에서 100 사이로 제한
-        score = (
-            100.0
-            - body_penalty
-            - duration_penalty
-            - no_face_penalty
-            - gaze_penalty      # 시선 방향 패널티 추가
-            - eye_penalty       # eye_focus_score 기반 패널티 추가
-        )
+            # eye 상태가 조금 나쁘면 같은 PARTIAL_FOCUS 안에서 약하게 추가 보정
+            if self.state.face_detected and self.state.eye_status_msg != "Eye analysis disabled":
+                safe_eye_score = max(0.0, min(100.0, self.state.eye_focus_score))
+                score -= (100.0 - safe_eye_score) * 0.08
+        else:
+            # FOCUSED는 높은 점수를 유지하되, eye 상태가 조금 나쁘면 약하게만 반영
+            score = 100.0
+            if self.state.face_detected and self.state.eye_status_msg != "Eye analysis disabled":
+                safe_eye_score = max(0.0, min(100.0, self.state.eye_focus_score))
+                score -= (100.0 - safe_eye_score) * 0.03
 
         return max(0.0, min(100.0, score))
 
@@ -220,6 +224,6 @@ class AttentionAnalyzer:
             self.state.head_duration += dt
             self.state.body_duration += dt
 
-        self.state.score = self._calculate_score()
         self._update_state_label()
+        self.state.score = self._calculate_score()
         return self.state
