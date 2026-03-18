@@ -7,7 +7,7 @@ from head_pose import PoseAngles
 
 @dataclass(frozen=True)
 class AttentionConfig:
-    yaw_threshold: float = 25.0
+    yaw_threshold: float = 40.0
     pitch_threshold: float = 20.0
     roll_threshold: float = 15.0
     focused_yaw_threshold: float = 15.0
