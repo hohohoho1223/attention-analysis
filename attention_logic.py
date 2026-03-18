@@ -79,28 +79,33 @@ class AttentionAnalyzer:
         )
 
     def _is_screen_fixated(self) -> bool:
-        """머리 방향과 눈 방향을 함께 보고 실제로 화면을 응시 중인지 판단한다.
+        """머리 방향 + 눈 방향을 함께 고려한 실제 화면 응시 판단
 
-        - 눈이 중앙이면 기본적으로 화면 응시로 본다.
-        - 고개가 한쪽으로 돌아갔더라도, 눈이 반대 방향으로 보상하면
-          계속 화면(정면)을 응시하는 상황으로 해석한다.
+        핵심:
+        - gaze == Center만으로는 응시로 보지 않는다.
+        - head가 돌아갔으면 반드시 eye가 반대 방향으로 보상해야 한다.
         """
         gaze = self.state.gaze_direction
         yaw = self.state.smoothed_yaw
 
-        if gaze == "Center":
-            return True
-
         head_left = yaw < -self.config.focused_yaw_threshold
         head_right = yaw > self.config.focused_yaw_threshold
-        eye_left = gaze == "Right"
-        eye_right = gaze == "Left"
 
+        eye_left = gaze == "Left"
+        eye_right = gaze == "Right"
+        eye_center = gaze == "Center"
+
+        # 1. head가 정면일 때만 center 허용
+        if not head_left and not head_right:
+            return eye_center
+
+        # 2. head가 돌아갔으면 eye는 반대 방향이어야 함 (보상)
         if head_left and eye_right:
             return True
         if head_right and eye_left:
             return True
 
+        # 3. 그 외는 모두 비응시
         return False
 
     # 집중 저하 지속 시간 업데이트: 얼굴이 감지되고, 일정 각도 이상으로 고개가 돌아간 경우 지속 시간 증가, 그렇지 않고 집중 범위에 있으면 지속 시간 감소
@@ -179,7 +184,7 @@ class AttentionAnalyzer:
 
         # 2) 화면 응시가 깨진 상태가 충분히 지속되면 LOST_FOCUS
         if not screen_fixated:
-            if combined_duration >= self.config.distracted_time:
+            if combined_duration >= self.config.lost_focus_time:
                 self.state.state = "LOST_FOCUS"
             else:
                 # 짧은 비응시 구간은 회복/전환 구간으로 보고 PARTIAL_FOCUS로 둔다.
