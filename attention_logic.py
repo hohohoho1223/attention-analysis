@@ -102,7 +102,8 @@ class AttentionAnalyzer:
             )
 
     def _calculate_score(self) -> float:
-
+        
+        # 각도 패널티: 각도가 설정된 임계값을 초과하는 정도에 비례하여 패널티 적용, 최대 2배까지 패널티 적용, yaw 최대 25점, pitch 최대 20점, roll 최대 10점 패널티 적용
         yaw_penalty = min(abs(self.state.smoothed_yaw) / max(self.config.yaw_threshold, 1e-6), 2.0) * 25.0
         pitch_penalty = min(abs(self.state.smoothed_pitch) / max(self.config.pitch_threshold, 1e-6), 2.0) * 20.0
         roll_penalty = min(abs(self.state.smoothed_roll) / max(self.config.roll_threshold, 1e-6), 2.0) * 10.0
@@ -115,6 +116,14 @@ class AttentionAnalyzer:
         duration_penalty = min(combined_duration, 5.0) * 8.0
         no_face_penalty = min(self.state.no_face_duration, 3.0) * 12.0
 
+        # gaze 방향 패널티 (핵심)
+        gaze_penalty = 0.0
+        if self.state.gaze_direction != "Center":
+            gaze_penalty = 25.0  # 시선 이탈은 강하게
+
+        # eye_focus_score 기반 보조 패널티
+        eye_penalty = (100.0 - self.state.eye_focus_score) * 0.2
+
         # 100점에서 각 패널티를 차감하여 최종 점수 계산, 점수는 0에서 100 사이로 제한
         score = (
             100.0
@@ -124,6 +133,8 @@ class AttentionAnalyzer:
             - body_penalty
             - duration_penalty
             - no_face_penalty
+            - gaze_penalty      # 시선 방향 패널티 추가
+            - eye_penalty       # eye_focus_score 기반 패널티 추가
         )
 
         return max(0.0, min(100.0, score))
