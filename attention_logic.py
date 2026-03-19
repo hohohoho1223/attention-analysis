@@ -13,7 +13,7 @@ class AttentionConfig:
     focused_yaw_threshold: float = 30.0 # 정면 허용 범위 각도 -> 이 범위 안이면 '정면(집중 가능한 상태)'으로 본다
     focused_pitch_threshold: float = 15.0
     focused_roll_threshold: float = 10.0
-    partial_focus_time: float = 1.0 
+    partial_focus_time: float = 3.0
     lost_focus_time: float = 5.0
     no_face_time: float = 5.0
     smoothing_alpha: float = 0.35 # 스무딩 가중치 0.35(0.0 ~ 1.0)로 설정-> 현재 측정값이 35%, 이전 측정값 65% 반영
@@ -29,6 +29,7 @@ class AttentionState:
     score: float = 100.0
     head_duration: float = 0.0  # 고개 기반 집중 저하 지속 시간
     body_duration: float = 0.0  # 몸 기울기 기반 집중 저하 지속 시간
+    fixation_break_duration: float = 0.0  # 실제 화면 비응시 지속 시간 (head + eye 종합)
     no_face_duration: float = 0.0 # 얼굴 미검출 지속 시간
     face_detected: bool = False
     smoothed_yaw: float = 0.0
@@ -130,6 +131,16 @@ class AttentionAnalyzer:
                 self.state.body_duration - dt * self.config.recovery_speed,
             )
 
+        # fixation break duration tracking
+        screen_fixated = self._is_screen_fixated()
+        if not screen_fixated:
+            self.state.fixation_break_duration += dt
+        else:
+            self.state.fixation_break_duration = max(
+                0.0,
+                self.state.fixation_break_duration - dt * self.config.recovery_speed,
+            )
+
     def _calculate_score(self) -> float:
         """상태(state)를 먼저 해석하고, 그 상태가 얼마나 지속되었는지로 점수를 보정한다.
 
@@ -139,8 +150,8 @@ class AttentionAnalyzer:
         - feature별 즉시 감점 합산보다 상태 기반 해석을 우선한다.
         """
         combined_duration = max(self.state.head_duration, self.state.body_duration)
-        partial_driver = max(self.state.body_duration, 0.0)
-        lost_driver = max(combined_duration, self.state.no_face_duration)
+        partial_driver = max(self.state.body_duration, self.state.fixation_break_duration)
+        lost_driver = max(self.state.fixation_break_duration, self.state.no_face_duration)
 
         if self.state.state == "ABSENT":
             # 이탈 상태는 가장 낮은 점수 구간에서 빠르게 0점으로 수렴
@@ -176,18 +187,22 @@ class AttentionAnalyzer:
             self.state.state = "LOST_FOCUS"
             return
 
-        combined_duration = max(self.state.head_duration, self.state.body_duration)
         screen_fixated = self._is_screen_fixated()
         body_unstable = abs(self.state.smoothed_body_tilt) > 20.0
         eye_degraded = self.state.eye_focus_score < 70.0
+        fixation_break = self.state.fixation_break_duration
 
-        # 2) 화면 응시가 깨진 상태가 충분히 지속되면 LOST_FOCUS
+        # 2) 화면 비응시 상태는 지속시간으로 해석한다.
+        #    - 아주 짧으면 FOCUSED 유지 (노이즈 / 회복 구간)
+        #    - 조금 지속되면 PARTIAL_FOCUS
+        #    - 오래 지속되면 LOST_FOCUS
         if not screen_fixated:
-            if combined_duration >= self.config.lost_focus_time:
+            if fixation_break >= self.config.lost_focus_time:
                 self.state.state = "LOST_FOCUS"
-            else:
-                # 짧은 비응시 구간은 회복/전환 구간으로 보고 PARTIAL_FOCUS로 둔다.
+            elif fixation_break >= self.config.partial_focus_time:
                 self.state.state = "PARTIAL_FOCUS"
+            else:
+                self.state.state = "FOCUSED"
             return
 
         # 3) 화면은 보고 있지만 자세/눈 상태가 불안정하면 PARTIAL_FOCUS
