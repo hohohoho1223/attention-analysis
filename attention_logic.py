@@ -10,7 +10,7 @@ class AttentionConfig:
     yaw_threshold: float = 70.0 # 확실히 돌아간 상태로 간주하는 각도 임계치
     pitch_threshold: float = 30.0
     roll_threshold: float = 25.0
-    focused_yaw_threshold: float = 60.0 # 정면 허용 범위 각도 -> 이 범위 안이면 '정면(집중 가능한 상태)'으로 본다
+    focused_yaw_threshold: float = 35.0 # 정면 허용 범위 각도 -> 이 범위 안이면 '정면(집중 가능한 상태)'으로 본다
     focused_pitch_threshold: float = 15.0
     focused_roll_threshold: float = 10.0
     partial_focus_time: float = 3.0
@@ -88,8 +88,11 @@ class AttentionAnalyzer:
         gaze = self.state.gaze_direction
         yaw = self.state.smoothed_yaw
 
-        head_left = yaw < -self.config.focused_yaw_threshold
-        head_right = yaw > self.config.focused_yaw_threshold
+        # 현재 프로젝트의 yaw 부호 기준에 맞춘 해석
+        # - 사용자가 화면 기준 오른쪽으로 고개를 돌리면 yaw가 음수
+        # - 사용자가 화면 기준 왼쪽으로 고개를 돌리면 yaw가 양수
+        head_left = yaw > self.config.focused_yaw_threshold
+        head_right = yaw < -self.config.focused_yaw_threshold
 
         eye_left = gaze == "Left"
         eye_right = gaze == "Right"

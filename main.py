@@ -376,9 +376,17 @@ class VideoFaceAnalyzer:
         # screen fixation 상태 표시 (head + gaze 기반 해석)
         fixation_status = "FIXATED" if self.attention_analyzer._is_screen_fixated() else "NOT FIXATED"
 
+        yaw = attention_state.smoothed_yaw
+        if yaw > self.attention_config.focused_yaw_threshold:
+            head_direction = "Left"
+        elif yaw < -self.attention_config.focused_yaw_threshold:
+            head_direction = "Right"
+        else:
+            head_direction = "Center"
+
         cv2.putText(
             output,
-            f"Fixation: {fixation_status}",
+            f"Fixation: {fixation_status} | HeadDir: {head_direction} | Gaze: {attention_state.gaze_direction}",
             (10, 280),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
