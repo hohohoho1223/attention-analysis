@@ -263,6 +263,7 @@ class EyeFocusAnalyzer:
         ratio_r, width_r = self._get_gaze_ratio(right_eye_coords, right_iris_coords)
         current_gaze_ratio = ratio_l if width_l > width_r else ratio_r
 
+        # 시선 버퍼에 추가하고 평균 계산 → “최근 여러 프레임이 누적되어야 방향이 안정적으로 바뀜(노이즈 완화)”
         self.gaze_buffer.append(current_gaze_ratio)
         smooth_gaze = sum(self.gaze_buffer) / len(self.gaze_buffer)
         gaze_direction = self._classify_gaze(smooth_gaze)
