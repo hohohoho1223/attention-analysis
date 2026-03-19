@@ -227,12 +227,20 @@ class AttentionAnalyzer:
         blink_bpm: int = 0,
         eye_focus_score: float = 100.0,
         eye_status_msg: str = "Eye analysis disabled",
+        is_drowsy: bool = False
     ) -> AttentionState:
         self.state.face_detected = face_detected
         self.state.gaze_direction = gaze_direction
         self.state.blink_bpm = blink_bpm
         self.state.eye_focus_score = eye_focus_score
         self.state.eye_status_msg = eye_status_msg
+
+        if is_drowsy:
+            self.state.state = "DROWSY"
+            self.state.score = max(0.0, self.state.score - 8.0 * dt) # 초당 8점 삭감
+            self.state.eye_status_msg = "DROWSY DETECTED: Penalty!"
+            self.state.no_face_duration = 0.0 # 얼굴은 있으니까 이탈 타이머 리셋
+            return self.state
 
         if face_detected:
             self.state.no_face_duration = 0.0
