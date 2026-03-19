@@ -195,8 +195,8 @@ class AttentionAnalyzer:
         eye_degraded = self.state.eye_focus_score < 70.0
         fixation_break = self.state.fixation_break_duration
 
-        # 2) 화면 비응시 상태는 지속시간으로 해석한다.
-        #    - 아주 짧으면 FOCUSED 유지 (노이즈 / 회복 구간)
+        # 2) 화면 비응시 상태(NOT_fixated)는 지속시간으로 판단한다.
+        #    - 아주 짧으면 FOCUSED 유지 (노이즈 / 회복 구간 고려)
         #    - 조금 지속되면 PARTIAL_FOCUS
         #    - 오래 지속되면 LOST_FOCUS
         if not screen_fixated:
@@ -208,7 +208,7 @@ class AttentionAnalyzer:
                 self.state.state = "FOCUSED"
             return
 
-        # 3) 화면은 보고 있지만 자세/눈 상태가 불안정하면 PARTIAL_FOCUS
+        # 3) 화면 응시 상태(fixated)라도, 몸이 많이 기울어졌거나 눈 상태가 많이 나쁘면 PARTIAL_FOCUS
         if body_unstable or eye_degraded:
             self.state.state = "PARTIAL_FOCUS"
             return
