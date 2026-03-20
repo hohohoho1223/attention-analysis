@@ -7,7 +7,7 @@ from head_pose import PoseAngles
 
 @dataclass(frozen=True)
 class AttentionConfig:
-    yaw_threshold: float = 70.0 # 확실히 돌아간 상태로 간주하는 각도 임계치
+    yaw_threshold: float = 60.0 # 확실히 돌아간 상태로 간주하는 각도 임계치
     pitch_threshold: float = 30.0
     roll_threshold: float = 25.0
     focused_yaw_threshold: float = 35.0 # 정면 허용 범위 각도 -> 이 범위 안이면 '정면(집중 가능한 상태)'으로 본다
