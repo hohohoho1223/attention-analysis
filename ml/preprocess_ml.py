@@ -11,9 +11,19 @@ import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from dataclasses import dataclass, field
 
 from head_pose import HeadPoseEstimator
 from eye_focus import EyeFocusAnalyzer
+
+@dataclass
+class Buffers:
+    lm: list = field(default_factory=list)
+    pitch: list = field(default_factory=list)
+    yaw: list = field(default_factory=list)
+    roll: list = field(default_factory=list)
+    gaze_ratio: list = field(default_factory=list)
+    blink: list = field(default_factory=list)
 
 
 # 이미지/단일 프레임 기반
@@ -128,17 +138,17 @@ def extract_video_feature(video_path, draw=False):
     vid_id = Path(video_path).stem
     window_idx = 0
 
-    # 결과 초기값
-    pitch_buf, yaw_buf, roll_buf = [],[],[]
-    gaze_buf, blink_buf = [],[]
-    window_stats = [] # X 프레임 통계값 저장
+    # 초기값
+    buffers = Buffers()
+    window_stats = []  # X 프레임 통계값 저장
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        results = face_mesh.process(frame)
+        frameRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(frameRGB)
         lm_list = []
 
         # 초기값 설정 
@@ -169,34 +179,27 @@ def extract_video_feature(video_path, draw=False):
 
         # 결과        
         if len(lm_list) != 0: # 얼굴 인식이 될 때만 추가
-            pitch_buf.append(pitch)
-            yaw_buf.append(yaw)
-            roll_buf.append(roll)
-            gaze_buf.append(gaze_ratio)
-            blink_buf.append(blink)
+            buffers.lm.append(lm_list)
+            buffers.pitch.append(pitch)
+            buffers.yaw.append(yaw)
+            buffers.roll.append(roll)
+            buffers.gaze_ratio.append(gaze_ratio)
+            buffers.blink.append(blink)
         
-        if len(pitch_buf) == WINDOW_SIZE: # 버퍼가 X프레임 찼는지 확인
-            row = {
-                'vid_id': vid_id, 'window_id': window_idx,
-                'pitch_mean': np.mean(pitch_buf), 'pitch_std': np.std(pitch_buf),
-                'yaw_mean': np.mean(yaw_buf),     'yaw_std': np.std(yaw_buf),
-                'roll_mean': np.mean(roll_buf),   'roll_std': np.std(roll_buf),
-                'gaze_mean': np.mean(gaze_buf),   'gaze_std': np.std(gaze_buf),
-                'blink_mean': np.mean(blink_buf),
-            }
+        if len(buffers.lm) == WINDOW_SIZE: # 버퍼가 X프레임 찼는지 확인
+            row = _build_feature_vid(vid_id, window_idx, buffers)
             window_stats.append(row)
 
             window_idx += 1
 
             # 버퍼 비우기
-            pitch_buf, yaw_buf, roll_buf = [], [], []
-            gaze_buf, blink_buf = [], []
+            buffers = Buffers()
 
     cap.release()
     return pd.DataFrame(window_stats)
 
 
-def _build_feature_data(landmark, label, include_blink):
+def _build_feature_img(landmark, label, include_blink):
     rows = []
     for id, data in landmark.items():
         if data is None:
@@ -218,5 +221,22 @@ def _build_feature_data(landmark, label, include_blink):
 
     return df
 
+def _build_feature_vid(vid_id, window_idx, buffers):
+    lm_array = np.array(buffers.lm) # x=468, y=468
+    row = {'vid_id': vid_id, 'window_id': window_idx}
 
+    for i in range(468): # vid는 len(lm_list) != 0 <- 여기서 0을 거르기 때문에 항상 468 보장
+        row[f'x{i}_mean'] = np.mean(lm_array[:, i*2])
+        row[f'x{i}_std']  = np.std(lm_array[:, i*2])
+        row[f'y{i}_mean'] = np.mean(lm_array[:, i*2+1])
+        row[f'y{i}_std']  = np.std(lm_array[:, i*2+1])
 
+    row.update({
+        'pitch_mean': np.mean(buffers.pitch), 'pitch_std': np.std(buffers.pitch),
+        'yaw_mean': np.mean(buffers.yaw),     'yaw_std': np.std(buffers.yaw),
+        'roll_mean': np.mean(buffers.roll),   'roll_std': np.std(buffers.roll),
+        'gaze_mean': np.mean(buffers.gaze_ratio),   'gaze_std': np.std(buffers.gaze_ratio),
+        'blink_mean': np.mean(buffers.blink),
+    })
+
+    return row

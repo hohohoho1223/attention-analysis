@@ -11,7 +11,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.preprocessing import label_binarize
 
 
-class ML_classification():
+class Classification_ML():
   def stratified_split(self, df, val_percent=0.2):
     '''
     Function to split a dataframe into train and validation sets, while preserving the ratio of the labels in the target variable
@@ -34,50 +34,13 @@ class ML_classification():
         train_idxs+=idx[val_size:]
     return train_idxs, val_idxs
 
-  def feature_sets(self, df):
-   
-   # data split
-    train_idxs, val_idxs = self.stratified_split(df, val_percent=0.25)
-    val_idxs, test_idxs = self.stratified_split(df[df.index.isin(val_idxs)], val_percent=0.5)
-
-    train_df = df[df.index.isin(train_idxs)]
-    val_df = df[df.index.isin(val_idxs)]
-    test_df = df[df.index.isin(test_idxs)]
-
-    # 특성에 따른 ML 성능
-    def get_sets(data):
-        s1 = data.loc[:,'x0':'y467'] # 랜드마크
-        s2 = data[['pitch', 'yaw', 'roll']] # head pose
-        s3 = data[['gaze_ratio', 'eye_openness', 'blink']].dropna(axis=1, how='all') # gaze, blink (or eye_openness) #dropna(axis=1, how='all') = 한 열이 모두 None이면 날림
-        s4 = pd.concat([s1,s2,s3], axis=1) # 전체 통합
-        return s1.values, s2.values, s3.values, s4.values
-    
-    X_s1_train, X_s2_train, X_s3_train, X_s4_train = get_sets(train_df)
-    X_s1_val, X_s2_val, X_s3_val, X_s4_val = get_sets(val_df)
-    X_s1_test, X_s2_test, X_s3_test, X_s4_test = get_sets(test_df)
-
-    Y_train = train_df[['Label']].values
-    Y_val = val_df[['Label']].values
-    Y_test = test_df[['Label']].values
-
-    #store data, all in numpy arrays
-    training_data=[]
-    for X_train, X_val, X_test in [
-        (X_s1_train, X_s1_val, X_s1_test),
-        (X_s2_train, X_s2_val, X_s2_test),
-        (X_s3_train, X_s3_val, X_s3_test),
-        (X_s4_train, X_s4_val, X_s4_test),
-    ]:
-        training_data.append({
-            'X_train': X_train, 'Y_train': Y_train,
-            'X_val':   X_val,   'Y_val':   Y_val,
-            'X_test':  X_test,  'Y_test':  Y_test
-        })
-    return training_data
+  def feature_sets(self, df, mode, test_df=None): # mode, test_df 지정 추가
+    if mode == 'img':
+        return self._feature_sets_img(df)
+    else:
+        return self._feature_sets_vid(df, test_df=test_df)
 
   def classifier_result(self, training_data,i,path_o):
-
-    
     temp=[]
 
     #initial model
@@ -259,3 +222,99 @@ class ML_classification():
       plt.tight_layout()
       plt.show()
       return fig
+
+
+  ################################
+  # feature img/vid
+  ################################
+
+    
+  def _feature_sets_img(self, df):
+    # data split
+    train_idxs, val_idxs = self.stratified_split(df, val_percent=0.25)
+    val_idxs, test_idxs = self.stratified_split(df[df.index.isin(val_idxs)], val_percent=0.5)
+
+    train_df = df[df.index.isin(train_idxs)]
+    val_df = df[df.index.isin(val_idxs)]
+    test_df = df[df.index.isin(test_idxs)]
+
+    # 특성에 따른 ML 성능
+    def get_sets(data):
+        s1 = data.loc[:,'x0':'y467'] # 랜드마크
+        s2 = data[['pitch', 'yaw', 'roll']] # head pose
+        s3 = data[['gaze_ratio']]
+        s4 = pd.concat([s1,s2,s3], axis=1) # 전체 통합
+        return s1.values, s2.values, s3.values, s4.values
+    
+    X_s1_train, X_s2_train, X_s3_train, X_s4_train = get_sets(train_df)
+    X_s1_val, X_s2_val, X_s3_val, X_s4_val = get_sets(val_df)
+    X_s1_test, X_s2_test, X_s3_test, X_s4_test = get_sets(test_df)
+
+    Y_train = train_df[['Label']].values
+    Y_val = val_df[['Label']].values
+    Y_test = test_df[['Label']].values
+
+    #store data, all in numpy arrays
+    training_data=[]
+    for X_train, X_val, X_test in [
+        (X_s1_train, X_s1_val, X_s1_test),
+        (X_s2_train, X_s2_val, X_s2_test),
+        (X_s3_train, X_s3_val, X_s3_test),
+        (X_s4_train, X_s4_val, X_s4_test),
+    ]:
+        training_data.append({
+            'X_train': X_train, 'Y_train': Y_train,
+            'X_val':   X_val,   'Y_val':   Y_val,
+            'X_test':  X_test,  'Y_test':  Y_test
+        })
+    return training_data
+
+  def _feature_sets_vid(self, df, test_df):
+    # data split (타 데이터 사용 시)
+    # train_idxs, val_idxs = self.stratified_split(df, val_percent=0.25)
+    # val_idxs, test_idxs = self.stratified_split(df[df.index.isin(val_idxs)], val_percent=0.5)
+
+    # train_df = df[df.index.isin(train_idxs)]
+    # val_df = df[df.index.isin(val_idxs)]
+    # test_df = df[df.index.isin(test_idxs)]
+
+    train_df = df
+    test_df = test_df
+
+    # 특성에 따른 ML 성능
+    def get_sets(data):
+        s1 = data.filter(regex=r'^(x|y)\d+_(mean|std)$')  # 랜드마크 통계
+        s2 = data[['pitch_mean','pitch_std','yaw_mean','yaw_std','roll_mean','roll_std']] # head pose
+        s3 = data[['gaze_mean','gaze_std','blink_mean']]
+        s4 = pd.concat([s1,s2,s3], axis=1) # 전체 통합
+        return s1.values, s2.values, s3.values, s4.values
+    
+    X_s1_train, X_s2_train, X_s3_train, X_s4_train = get_sets(train_df)
+    # X_s1_val, X_s2_val, X_s3_val, X_s4_val = get_sets(val_df)
+    X_s1_test, X_s2_test, X_s3_test, X_s4_test = get_sets(test_df)
+
+    Y_train = train_df[['Label']].values
+    # Y_val = val_df[['Label']].values
+    Y_test = test_df[['Label']].values
+
+    #store data, all in numpy arrays
+    training_data=[]
+    # for X_train, X_val, X_test in [ # val 있는 경우
+    #     (X_s1_train, X_s1_val, X_s1_test),
+    #     (X_s2_train, X_s2_val, X_s2_test),
+    #     (X_s3_train, X_s3_val, X_s3_test),
+    #     (X_s4_train, X_s4_val, X_s4_test),
+    # ]:
+    for X_train, X_test in [ # val 없음
+        (X_s1_train, X_s1_test),
+        (X_s2_train, X_s2_test),
+        (X_s3_train, X_s3_test),
+        (X_s4_train, X_s4_test),
+    ]:
+        training_data.append({
+            'X_train': X_train, 'Y_train': Y_train,
+            # 'X_val':   X_val,   'Y_val':   Y_val,
+            'X_test':  X_test,  'Y_test':  Y_test
+        })
+    return training_data
+    
