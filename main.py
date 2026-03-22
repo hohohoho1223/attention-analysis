@@ -15,8 +15,8 @@ from upperbody_pose import UPPER_BODY_LANDMARKS, UpperBodyAnalyzer, UpperBodySta
 
 #ML
 import pandas as pd
-from features.run_feature_extract import run_feature_extract
-from ml.train_ml import train
+# from features.run_feature_extract import run_feature_extract
+# from ml.train_ml import train
 
 try:
     import cv2
@@ -31,6 +31,7 @@ mp_face_mesh = mp.solutions.face_mesh
 mp_pose = mp.solutions.pose
 
 DEFAULT_RUNTIME_CONFIG = DEFAULT_ATTENTION_CONFIG
+
 
 class VideoFaceAnalyzer:
     def __init__(
@@ -79,7 +80,8 @@ class VideoFaceAnalyzer:
         self.current_frame_idx = -1
         self.pose_angles = PoseAngles()
         self.face_detected = False
-        self.gaze_direction = "Unknown"
+        self.gaze_direction = "Unknown" 
+        self.gaze_ratio = 0.5 # ML용
         self.blink_bpm = 0
         self.eye_focus_score = 100.0
         self.eye_status_msg = "Eye analysis disabled"
@@ -219,8 +221,11 @@ class VideoFaceAnalyzer:
         
         # 🌟 임계치를 0.85로 높여서 진짜 확실하게 졸거나 하품할 때만 잡게 만듭니다.
         return smooth_prob > 0.77
-
-    def draw_mediapipe(self, frame):
+    
+    # extract features와 draw mediapipe 분리
+        # 참조 : max_num_faces가 항상 1이라 가정하여 함수 분리
+    # 특징 추출 함수
+    def _extract_features(self, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         rgb_for_inference = cv2.resize(rgb, None, fx=self.process_scale, fy=self.process_scale, interpolation=cv2.INTER_LINEAR) if 0 < self.process_scale < 1.0 else rgb
 
@@ -233,6 +238,29 @@ class VideoFaceAnalyzer:
         else:
             self.upper_body_state = UpperBodyState()
 
+        if results.multi_face_landmarks:
+            self.current_face_landmarks = results.multi_face_landmarks[0] #인스턴스 변수
+
+            self._update_head_pose_state(self.current_face_landmarks, frame)
+            eye_result = self.eye_focus_analyzer.analyze(frame, self.current_face_landmarks)
+
+            self.gaze_direction = eye_result.gaze_direction
+            self.gaze_ratio = eye_result.smooth_gaze_ratio # ML용
+            self.blink_bpm = eye_result.blink_bpm
+            self.eye_focus_score = eye_result.eye_focus_score
+            self.eye_status_msg = eye_result.eye_status_msg
+        else:
+            self.current_face_landmarks = None
+            self.pose_angles = PoseAngles()
+            self.face_detected = False
+            self.eye_focus_analyzer.reset()
+            self.gaze_direction = "Unknown"
+            self.gaze_ratio= 0.5 # ML용
+            self.blink_bpm = 0
+            self.eye_focus_score = 0.0
+            self.eye_status_msg = "Face Not Detected (Eye disabled)"
+    
+    def _draw_mediapipe(self, frame):
         if self.draw_upper_body_indices and self.upper_body_state.body_visible:
             display_names = {"left_shoulder": "L_shoulder", "right_shoulder": "R_shoulder", "left_elbow": "L_elbow", "right_elbow": "R_elbow"}
             for name, (x, y) in self.upper_body_state.landmark_points.items():
@@ -241,40 +269,81 @@ class VideoFaceAnalyzer:
                 cv2.circle(frame, (x, y), 5, (255, 0, 0), -1)
                 cv2.putText(frame, f"{label}:{idx}", (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1)
 
-        if results.multi_face_landmarks:
-            self.current_face_landmarks = results.multi_face_landmarks[0]
-            for face_landmarks in results.multi_face_landmarks:
-                self._update_head_pose_state(face_landmarks, frame)
-                eye_result = self.eye_focus_analyzer.analyze(frame, face_landmarks)
-                self.gaze_direction = eye_result.gaze_direction
-                self.blink_bpm = eye_result.blink_bpm
-                self.eye_focus_score = eye_result.eye_focus_score
-                self.eye_status_msg = eye_result.eye_status_msg
+        if self.current_face_landmarks:
+            if self.draw_head_pose_indices: self._draw_head_pose_landmark_indices(frame, self.current_face_landmarks)
+            if self.draw_tesselation:
+                mp_drawing.draw_landmarks(image=frame, landmark_list=self.current_face_landmarks, connections=mp_face_mesh.FACEMESH_TESSELATION, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style())
+            mp_drawing.draw_landmarks(image=frame, landmark_list=self.current_face_landmarks, connections=mp_face_mesh.FACEMESH_CONTOURS, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
+            if self.refine_landmarks:
+                mp_drawing.draw_landmarks(image=frame, landmark_list=self.current_face_landmarks, connections=mp_face_mesh.FACEMESH_IRISES, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style())
 
-                if self.draw_head_pose_indices: self._draw_head_pose_landmark_indices(frame, face_landmarks)
-                if self.draw_tesselation:
-                    mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_TESSELATION, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style())
-                mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_CONTOURS, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
-                if self.refine_landmarks:
-                    mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_IRISES, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style())
-
-            cv2.putText(frame, f"MediaPipe Face Mesh | faces: {len(results.multi_face_landmarks)} | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            # face가 항상 1개를 가정하여 만들었으므로 faces: {len(results.multi_face_landmarks)} 삭제
+            cv2.putText(frame, f"MediaPipe Face Mesh | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
             cv2.putText(frame, f"Yaw: {self.pose_angles.yaw:.1f} | Pitch: {self.pose_angles.pitch:.1f} | Roll: {self.pose_angles.roll:.1f}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
         else:
-            self.current_face_landmarks = None
-            self.pose_angles = PoseAngles()
-            self.face_detected = False
-            self.eye_focus_analyzer.reset()
-            self.gaze_direction = "Unknown"
-            self.blink_bpm = 0
-            self.eye_focus_score = 0.0
-            self.eye_status_msg = "Face Not Detected (Eye disabled)"
             cv2.putText(frame, f"MediaPipe Face Mesh | no face | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
             
         if self.upper_body_state.body_visible:
             cv2.putText(frame, f"Shoulder Tilt: {self.upper_body_state.shoulder_tilt:.1f}", (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (200, 255, 0), 2)
 
         return frame
+
+    # 기존 코드
+    # def draw_mediapipe(self, frame):
+    #     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    #     rgb_for_inference = cv2.resize(rgb, None, fx=self.process_scale, fy=self.process_scale, interpolation=cv2.INTER_LINEAR) if 0 < self.process_scale < 1.0 else rgb
+
+    #     results = self.face_mesh.process(rgb_for_inference)
+    #     self.face_detected = bool(results.multi_face_landmarks)
+
+    #     pose_results = self.pose.process(rgb)
+    #     if pose_results.pose_landmarks:
+    #         self.upper_body_state = self.upper_body_analyzer.estimate(pose_results.pose_landmarks, frame.shape[1], frame.shape[0])
+    #     else:
+    #         self.upper_body_state = UpperBodyState()
+
+    #     if self.draw_upper_body_indices and self.upper_body_state.body_visible:
+    #         display_names = {"left_shoulder": "L_shoulder", "right_shoulder": "R_shoulder", "left_elbow": "L_elbow", "right_elbow": "R_elbow"}
+    #         for name, (x, y) in self.upper_body_state.landmark_points.items():
+    #             idx = UPPER_BODY_LANDMARKS[name]
+    #             label = display_names[name]
+    #             cv2.circle(frame, (x, y), 5, (255, 0, 0), -1)
+    #             cv2.putText(frame, f"{label}:{idx}", (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1)
+
+    #     if results.multi_face_landmarks:
+    #         self.current_face_landmarks = results.multi_face_landmarks[0]
+    #         for face_landmarks in results.multi_face_landmarks:
+    #             self._update_head_pose_state(face_landmarks, frame)
+    #             eye_result = self.eye_focus_analyzer.analyze(frame, face_landmarks)
+    #             self.gaze_direction = eye_result.gaze_direction
+    #             self.blink_bpm = eye_result.blink_bpm
+    #             self.eye_focus_score = eye_result.eye_focus_score
+    #             self.eye_status_msg = eye_result.eye_status_msg
+
+    #             if self.draw_head_pose_indices: self._draw_head_pose_landmark_indices(frame, face_landmarks)
+    #             if self.draw_tesselation:
+    #                 mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_TESSELATION, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style())
+    #             mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_CONTOURS, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
+    #             if self.refine_landmarks:
+    #                 mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_IRISES, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style())
+
+    #         cv2.putText(frame, f"MediaPipe Face Mesh | faces: {len(results.multi_face_landmarks)} | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    #         cv2.putText(frame, f"Yaw: {self.pose_angles.yaw:.1f} | Pitch: {self.pose_angles.pitch:.1f} | Roll: {self.pose_angles.roll:.1f}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
+    #     else:
+    #         self.current_face_landmarks = None
+    #         self.pose_angles = PoseAngles()
+    #         self.face_detected = False
+    #         self.eye_focus_analyzer.reset()
+    #         self.gaze_direction = "Unknown"
+    #         self.blink_bpm = 0
+    #         self.eye_focus_score = 0.0
+    #         self.eye_status_msg = "Face Not Detected (Eye disabled)"
+    #         cv2.putText(frame, f"MediaPipe Face Mesh | no face | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            
+    #     if self.upper_body_state.body_visible:
+    #         cv2.putText(frame, f"Shoulder Tilt: {self.upper_body_state.shoulder_tilt:.1f}", (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (200, 255, 0), 2)
+
+    #     return frame
 
     def seek_frames(self, offset_frames: int) -> None:
         if not self.is_video_file: return
@@ -296,7 +365,11 @@ class VideoFaceAnalyzer:
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_idx + 1)
 
     def process_frame(self, frame):
-        output = self.draw_mediapipe(frame)
+        self._extract_features(frame)
+        output = self._draw_mediapipe(frame)
+
+        # 기존 코드
+        # output = self.draw_mediapipe(frame)
 
         # 🌟 4. CNN 방어막 가동
         is_drowsy = False
@@ -466,13 +539,3 @@ def main() -> None:
 # 이 엔진이 없어서 아까 소리 소문 없이 끝난 겁니다! 😂
 if __name__ == "__main__":
     main()
-
-# ML
-# feature 추출 (최초 1회만 실행, 이후 주석처리)
-# run_feature_extract()
-
-# 저장된 feature 불러오기
-df = pd.read_csv('./features.csv')
-
-# 모델 학습
-train()

@@ -11,8 +11,9 @@ import cv2
 import mediapipe as mp
 import os
 import pandas as pd
-from features.head_pose import HeadPoseEstimator
-from features.gaze_blink import FocusAnalyzer
+import pandas as pd
+from head_pose import HeadPoseEstimator
+from eye_focus import EyeFocusAnalyzer
 
 # 학습하지 않을 경우 False
 wacv = True
@@ -40,7 +41,7 @@ def faceMesh_extract(file_path,draw=True):
     # head pose class
     head_pose_estimator = HeadPoseEstimator()
     # gaze, blink class
-    gaze_blink_analyzer = FocusAnalyzer()
+    gaze_blink_analyzer = EyeFocusAnalyzer()
 
     for file in sorted(os.listdir(file_path)): # 이후 동영상 전처리 시 000001.jpg, 000002.jpg 처럼 패딩 넣어서 이름 만들기
         image = cv2.imread(os.path.join(file_path,file))
