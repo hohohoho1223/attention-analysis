@@ -358,6 +358,40 @@ class VideoFaceAnalyzer:
             (180, 255, 180),
             2,
         )
+        # ===== DEBUG LOG (원인 + 결과) =====
+        screen_fixated = self.attention_analyzer._is_screen_fixated()
+
+        yaw = attention_state.smoothed_yaw
+        if yaw > self.attention_config.focused_yaw_threshold:
+            head_direction = "Left"
+        elif yaw < -self.attention_config.focused_yaw_threshold:
+            head_direction = "Right"
+        else:
+            head_direction = "Center"
+
+        print(
+            f"[DEBUG] "
+            f"State={attention_state.state} | "
+            f"Score={attention_state.score:.1f} | "
+            f"Fixated={screen_fixated} | "
+            f"HeadDir={head_direction}({yaw:.1f}) | "
+            f"Gaze={attention_state.gaze_direction} | "
+            f"FixBreak={attention_state.fixation_break_duration:.2f} | "
+            f"HeadDur={attention_state.head_duration:.2f} | "
+            f"BodyDur={attention_state.body_duration:.2f}"
+        )
+
+        # 상태 변화 로그
+        if not hasattr(self, "prev_state"):
+            self.prev_state = None
+
+        if self.prev_state != attention_state.state:
+            print(
+                f"[STATE CHANGE] {self.prev_state} → {attention_state.state} | "
+                f"FixBreak={attention_state.fixation_break_duration:.2f} | "
+                f"Fixated={screen_fixated}"
+            )
+            self.prev_state = attention_state.state
 
         status_text = "PAUSED" if self.is_paused else "PLAYING"
         cv2.putText(output, f"{status_text} | fps: {self.fps:.1f} | q: quit", (10, self.frame_height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
