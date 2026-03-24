@@ -53,6 +53,13 @@ class Classification_ML():
                         seed=27)
     xgb.fit(training_data['X_train'], training_data['Y_train'].reshape(training_data['Y_train'].shape[0],))
     predicted_labels = xgb.predict(training_data['X_test'])
+
+    # 📊 [DEBUG] 예측 직후 데이터 확인 (이 위치가 맞습니다!)
+    acc = accuracy_score(training_data['Y_test'], predicted_labels)
+    print(f"\n[DEBUG] S{i} (XGBoost) - 모델 내부 계산 Accuracy: {acc:.4f}")
+    print(f"[DEBUG] S{i} - Test 데이터 샘플 수: {len(training_data['Y_test'])}")
+
+
     temp.append([xgb, accuracy_score(training_data['Y_test'], predicted_labels),
                  precision_score(training_data['Y_test'], predicted_labels, average='weighted'), 
                  recall_score(training_data['Y_test'], predicted_labels, average='weighted'),
@@ -64,6 +71,11 @@ class Classification_ML():
     rf_clf = RandomForestClassifier(n_jobs=None,random_state=27, verbose=1)
     rf_clf.fit(training_data['X_train'], training_data['Y_train'].reshape(training_data['Y_train'].shape[0],))
     predicted_labels = rf_clf.predict(training_data['X_test'])
+
+    # 📊 [DEBUG] RF 결과도 확인
+    acc_rf = accuracy_score(training_data['Y_test'], predicted_labels)
+    print(f"[DEBUG] S{i} (RF) - 모델 내부 계산 Accuracy: {acc_rf:.4f}")
+
     # train_pred = rf_clf.predict(training_data['X_train'])
     temp.append([rf_clf, accuracy_score(training_data['Y_test'], predicted_labels),
                  precision_score(training_data['Y_test'], predicted_labels, average='weighted'), 
@@ -283,9 +295,9 @@ class Classification_ML():
 
     # 특성에 따른 ML 성능
     def get_sets(data):
-        s1 = data.filter(regex=r'^(x|y)\d+_(mean|std)$')  # 랜드마크 통계
-        s2 = data[['pitch_mean','pitch_std','yaw_mean','yaw_std','roll_mean','roll_std']] # head pose
-        s3 = data[['gaze_mean','gaze_std','blink_mean']]
+        s1 = data.filter(regex=r'^(x|y)\d+_(diff_mean|std)$')  # 랜드마크 통계
+        s2 = data[['pitch_diff_mean','pitch_std','yaw_diff_mean','yaw_std','roll_diff_mean','roll_std']] # head pose
+        s3 = data[['gaze_diff_mean','gaze_std','blink_diff_mean']]
         s4 = pd.concat([s1,s2,s3], axis=1) # 전체 통합
         return s1.values, s2.values, s3.values, s4.values
     

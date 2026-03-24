@@ -21,6 +21,14 @@ def train():
     df = pd.read_csv(f"./features_{MODE}.csv")
     if MODE == "vid":
         test_df = pd.read_csv(f"./features_{MODE}_test.csv")
+    print("=== test 수 ===")
+    print(test_df['Label'].value_counts().sort_index())
+
+    print("=== 클래스별 샘플 수 ===")
+    print(df['Label'].value_counts().sort_index())
+
+    print("\n=== 영상별 window 수 ===")
+    print(df.groupby(['vid_id', 'Label'])['window_id'].count().reset_index())
 
     df0 = df[df['Label'] == 0]
     df1 = df[df['Label'] == 1]
@@ -28,12 +36,19 @@ def train():
 
     #클래스 불균형 처리 : Resampling for treating the class imabalnce problem
     n = min(len(df0),len(df1),len(df2))
+
+    print(f"\n=== resample 후 클래스당 n = {n} ===")
+    print(f"Label 0: {len(df0)}, Label 1: {len(df1)}, Label 2: {len(df2)}")
+
+
     df0_ds = resample(df0, replace=True, n_samples=n, random_state=42)
     df1_ds = resample(df1, replace=True, n_samples=n, random_state=42)
     df2_ds = resample(df2, replace=True, n_samples=n, random_state=42)
 
     df = pd.concat([df0_ds,df1_ds,df2_ds])
     df = df.sample(frac=1)
+
+    print(f"resampled : {len(df0_ds)}, {len(df1_ds)}, {len(df2_ds)}")
 
     if MODE == 'img':
         df_x = df.loc[:, "x0":"gaze_ratio"]#마지막 feature 컬럼까지
@@ -61,16 +76,30 @@ def train():
         S3(AU features)
         S4(Combined features)'''
 
+
+    print(f"\n[CHECK] 전처리 완료된 df 크기: {df.shape}")
+    print(f"[CHECK] 전처리 완료된 test_df 크기: {test_df.shape}")
+
     if MODE == "img":
         training_data=obj.feature_sets(df, mode=MODE)
     else:
         training_data=obj.feature_sets(df, mode=MODE, test_df=test_df)
+
+    # 여기에 추가
+    print("Y_test 총 개수:", len(training_data[0]['Y_test']))
+    print("Y_test 클래스 분포:", pd.Series(training_data[0]['Y_test'].flatten()).value_counts())
 
     dfML_result=[]
     roc_plot=[]
     cm_plot=[]
 
     path_trainedmodel = f"./ml/trained_models_{MODE}"
+
+    for i in range(4):
+        print(f"--- S{i} 세트 데이터 정보 ---")
+        print(f"X_train shape: {training_data[i]['X_train'].shape}")
+        print(f"X_test shape: {training_data[i]['X_test'].shape}") # 여기가 102개인지 반드시 확인
+        print(f"Y_test shape: {training_data[i]['Y_test'].shape}")
 
     #train the feature sets with our classifiction models
     for i in range(4):

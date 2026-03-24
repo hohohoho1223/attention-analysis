@@ -25,6 +25,7 @@ class Buffers:
     gaze_ratio: list = field(default_factory=list)
     blink: list = field(default_factory=list)
 
+WINDOW_SIZE=30
 
 # 이미지/단일 프레임 기반
 def extract_image_feature(file_path,draw=True):
@@ -115,8 +116,6 @@ def _preprocess_vid_to_img(video_path, output_dir):
     print(f"[INFO] 총 {frame_idx}프레임 추출 완료 → {output_dir}")
 
 # X 프레임 windows -> 통계값
-WINDOW_SIZE=30
-
 def extract_video_feature(video_path, draw=False):
     mp_face_mesh = mp.solutions.face_mesh
     face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, 
@@ -179,7 +178,7 @@ def extract_video_feature(video_path, draw=False):
 
         # 결과        
         if len(lm_list) != 0: # 얼굴 인식이 될 때만 추가
-            buffers.lm.append(lm_list)
+            buffers.lm.append(lm_list) # # x=468, y=468
             buffers.pitch.append(pitch)
             buffers.yaw.append(yaw)
             buffers.roll.append(roll)
@@ -222,21 +221,51 @@ def _build_feature_img(landmark, label, include_blink):
     return df
 
 def _build_feature_vid(vid_id, window_idx, buffers):
-    lm_array = np.array(buffers.lm) # x=468, y=468
+    lm_array = np.array(buffers.lm) # shape -> row : frames, column : coordinates
+
+    # 얼굴 크기 정규화 (카메라와의 거리)
+    face_w = np.abs(lm_array[:, 234*2] - lm_array[:, 454*2]) # 얼굴 좌(234)-우(454)의 x 좌표만 계산 
+                                                            # lm_array에서 i번째 랜드마크의 x = lm_array[:, i*2], y = lm_array[:, i*2+1] (현재 구조가 index0에 x0, index1에 y1 저장)
+    face_h = np.abs(lm_array[:, 10*2+1] - lm_array[:, 152*2+1]) # 얼굴 이마(10) - 턱(152)의 y 좌표만 계산
+    face_w = np.where(face_w == 0, 1, face_w) # face_w=0이면 1, 아니면 face_w. 0 나누기 방지
+    face_h = np.where(face_h == 0, 1, face_h)
+
+    # 1. 분모가 이상하지 않은지 확인
+    if window_idx % 10 == 0: # 너무 많이 찍히니까 10번째 윈도우마다 확인
+        print(f"[DEBUG] vid: {vid_id}, win: {window_idx}, face_w_avg: {np.mean(face_w):.2f}")
+
     row = {'vid_id': vid_id, 'window_id': window_idx}
 
-    for i in range(468): # vid는 len(lm_list) != 0 <- 여기서 0을 거르기 때문에 항상 468 보장
-        row[f'x{i}_mean'] = np.mean(lm_array[:, i*2])
-        row[f'x{i}_std']  = np.std(lm_array[:, i*2])
-        row[f'y{i}_mean'] = np.mean(lm_array[:, i*2+1])
-        row[f'y{i}_std']  = np.std(lm_array[:, i*2+1])
+    # 차분 계산 (익명함수 lambda 사용)
+    get_diff_mean = lambda data:np.mean(np.abs(np.diff(data))) if len(data) > 1 else 0
+    # 분산 계산
+    get_std = lambda data: np.std(data) if len(data) > 1 else 0
 
+    # lm
+    for i in range(468): # vid는 len(lm_list) != 0 <- 여기서 0을 거르기 때문에 항상 468 보장
+        # lm 정규화
+        x_norm = lm_array[:, i*2] / face_w #전체 좌표의 X축 정규화
+        y_norm = lm_array[:, i*2+1] / face_h #전체 좌표의 Y축 정규화
+
+        # 2. 정규화된 값의 범위 확인 (너무 작거나 크지 않은지)
+        if i == 0 and window_idx == 0: # 첫 번째 랜드마크만 샘플로 확인
+            print(f"[DEBUG] x_norm sample (lm 0): {x_norm[:3]}")
+
+        # lm의 프레임 간 움직임 차이
+        row[f'x{i}_diff_mean'] = get_diff_mean(x_norm)
+        row[f'y{i}_diff_mean']  = get_diff_mean(y_norm)
+
+        row[f'x{i}_std']  = get_std(x_norm)
+        row[f'y{i}_std']  = get_std(y_norm)
+
+
+    # 상체 포즈, 시선 움직임, 눈 깜빡임
     row.update({
-        'pitch_mean': np.mean(buffers.pitch), 'pitch_std': np.std(buffers.pitch),
-        'yaw_mean': np.mean(buffers.yaw),     'yaw_std': np.std(buffers.yaw),
-        'roll_mean': np.mean(buffers.roll),   'roll_std': np.std(buffers.roll),
-        'gaze_mean': np.mean(buffers.gaze_ratio),   'gaze_std': np.std(buffers.gaze_ratio),
-        'blink_mean': np.mean(buffers.blink),
+        'pitch_diff_mean': get_diff_mean(buffers.pitch), 'pitch_std': get_std(buffers.pitch),
+        'yaw_diff_mean': get_diff_mean(buffers.yaw),     'yaw_std': get_std(buffers.yaw),
+        'roll_diff_mean': get_diff_mean(buffers.roll),   'roll_std': get_std(buffers.roll),
+        'gaze_diff_mean': get_diff_mean(buffers.gaze_ratio),   'gaze_std': get_std(buffers.gaze_ratio),
+        'blink_diff_mean': get_diff_mean(buffers.blink),
     })
 
     return row
