@@ -1,418 +1,239 @@
-from __future__ import annotations
-
-import argparse
-import os
-from typing import Optional
-from collections import deque
-
-import mediapipe as mp
+import cv2
 import numpy as np
 import tensorflow as tf
+import mediapipe as mp
+from scipy.spatial import distance as dist
+from collections import deque
+import time
 
-from attention_logic import AttentionAnalyzer, AttentionConfig, DEFAULT_ATTENTION_CONFIG
-from eye_focus import EyeFocusAnalyzer
-from head_pose import HeadPoseEstimator, PoseAngles
-from upperbody_pose import UPPER_BODY_LANDMARKS, UpperBodyAnalyzer, UpperBodyState
-
-try:
-    import cv2
-except Exception as exc:
-    raise RuntimeError(
-        "OpenCV(cv2) import 에 실패했습니다. 현재 환경의 opencv-python 버전 충돌 가능성이 큽니다.\n"
-    ) from exc
-
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
-mp_face_mesh = mp.solutions.face_mesh
-mp_pose = mp.solutions.pose
-
-DEFAULT_RUNTIME_CONFIG = DEFAULT_ATTENTION_CONFIG
-
-class VideoFaceAnalyzer:
-    def __init__(
-        self,
-        source: str,
-        save_path: Optional[str] = None,
-        max_num_faces: int = 1,
-        detection_confidence: float = 0.5,
-        tracking_confidence: float = 0.5,
-        refine_landmarks: bool = True,
-        process_scale: float = 0.75,
-        draw_tesselation: bool = False,
-        draw_head_pose_indices: bool = False,
-        draw_upper_body_indices: bool = False,
-        attention_config: AttentionConfig = DEFAULT_RUNTIME_CONFIG,
-    ) -> None:
-        self.source = 0 if source == "webcam" else source
-        self.save_path = save_path
-        self.max_num_faces = max_num_faces
-        self.detection_confidence = detection_confidence
-        self.tracking_confidence = tracking_confidence
-        self.refine_landmarks = refine_landmarks
-        self.process_scale = process_scale
-        self.draw_tesselation = draw_tesselation
-        self.draw_head_pose_indices = draw_head_pose_indices
-        self.draw_upper_body_indices = draw_upper_body_indices
-        self.attention_config = attention_config
-
-        self.cap = cv2.VideoCapture(self.source)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"영상을 열 수 없습니다: {source}")
-
-        self.writer = None
-        self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
-        self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        if not self.fps or self.fps <= 0:
-            self.fps = 30.0
-
-        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-        self.is_video_file = self.source != 0
-        self.is_paused = False
-        self.frame_delay_ms = max(1, int(round(1000 / self.fps)))
-        self.current_frame_idx = -1
-        self.pose_angles = PoseAngles()
-        self.face_detected = False
-        self.gaze_direction = "Unknown"
-        self.blink_bpm = 0
-        self.eye_focus_score = 100.0
-        self.eye_status_msg = "Eye analysis disabled"
-        self.current_face_landmarks = None
-
+class FocusAnalyzer:
+    def __init__(self):
+        # 1. MediaPipe 설정 (다시 원래대로 깔끔하게!)
+        self.mp_face_mesh = mp.solutions.face_mesh
+        self.face_mesh = self.mp_face_mesh.FaceMesh(
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
+        # 2. MobileNetV2 설정 (방어막 엔진) 🌟 [추가됨]
+        print("방어막 모델을 로드하는 중...")
+        try:
+            self.defense_model = tf.keras.models.load_model('face_defense_model.h5') # 같은 폴더에 모델 파일 필수!
+            print("✅ 방어막 모델 로드 완료!")
+        except Exception as e:
+            print(f"❌ 모델 로드 실패: {e}")
+            exit()
+            
+        self.class_names = ['0_normal', '1_glare', '2_occlusion']
+        
+        # 눈 관련 랜드마크 인덱스
         self.LEFT_EYE = [362, 385, 387, 263, 373, 380]
         self.RIGHT_EYE = [33, 160, 158, 133, 153, 144]
+        self.LEFT_IRIS = [473, 474, 475, 476]
+        self.RIGHT_IRIS = [468, 469, 470, 471]
 
-        if self.save_path:
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            self.writer = cv2.VideoWriter(
-                self.save_path,
-                fourcc,
-                self.fps,
-                (self.frame_width, self.frame_height),
-            )
-
-        # 🌟 1. CNN 방어막 모델 안전하게 로드
-        self.defense_model = None
-        self.cnn_prob_buffer = deque(maxlen=8) # 시간 윈도우 스무딩
+        # 데이터 스무딩을 위한 버퍼
+        self.ear_buffer = deque(maxlen=5)
+        self.gaze_buffer = deque(maxlen=15)
         
-        # 건우님이 구워오신 모델명!
-        model_name = 'face_defense_model.h5' 
+        # 캘리브레이션 및 상태 관리
+        self.is_calibrated = False
+        self.calibration_frames = 0
+        self.MAX_CALIB_FRAMES = 100
+        self.base_ear = 0.0
         
-        print(f"🛡️ AI 방어막 모델({model_name})을 로드하는 중...")
-        if os.path.exists(model_name):
-            try:
-                self.defense_model = tf.keras.models.load_model(model_name)
-                print("✅ 1티어 방어막 모델 로드 완료!")
-            except Exception as e:
-                print(f"❌ 모델 로드 중 에러 발생: {e}")
-        else:
-            print(f"❌ '{model_name}' 파일을 찾을 수 없습니다!")
+        # 눈 깜빡임(BPM) 및 멍때림 감지용 변수
+        self.blink_timestamps = deque() 
+        self.eye_closed = False
+        self.gaze_variance_buffer = deque(maxlen=30)
+        self.start_time = time.time()
+        
+        # 🌟 [추가됨] 예외 상황 발생 시 직전 점수를 유지하기 위한 변수
+        self.last_score = 100  
 
-        # MediaPipe 초기화
-        self.face_mesh = mp_face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=self.max_num_faces,
-            refine_landmarks=self.refine_landmarks,
-            min_detection_confidence=self.detection_confidence,
-            min_tracking_confidence=self.tracking_confidence,
-        )
-        self.head_pose_estimator = HeadPoseEstimator()
-        self.upper_body_analyzer = UpperBodyAnalyzer()
-        self.upper_body_state = UpperBodyState()
+    def _check_edge_case(self, frame, face_landmarks, w, h, padding=15):
+        """🌟 [완벽 수정됨] 에러 없이 얼굴 전체(Full Face)를 224x224로 판별합니다."""
+        try:
+            # 1. 눈만 자르는 낡은 로직은 삭제! 대신 웹캠 전체 화면(frame)을 사용합니다.
+            # 모델이 학습했던 224x224 사이즈로 맞춰줍니다.
+            img_resized = cv2.resize(frame, (224, 224))
+            img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+            
+            # 2. 모델에 넣기 위한 차원 확장 및 전처리
+            img_array = np.expand_dims(img_rgb, axis=0)
+            img_preprocessed = tf.keras.applications.mobilenet_v2.preprocess_input(img_array.astype(np.float32))
+            
+            # 3. 예측 수행
+            predictions = self.defense_model.predict(img_preprocessed, verbose=0)
+            
+            # 4. 캐글 모델은 클래스가 딱 2개! (0: 정상, 1: 가려짐)
+            class_idx = np.argmax(predictions[0])
+            confidence = predictions[0][class_idx]
+            
+            # 5. 가려짐(인덱스 1)이라고 80% 이상 확신할 때만 Paused 발동!
+            if class_idx == 1 and confidence > 0.8: 
+                return "2_occlusion" # 아래 메인 로직과 호환성을 위해 2_occlusion으로 문자열 반환
+            else:
+                return "0_normal"
+                
+        except Exception as e:
+            # 이제 에러가 나면 무조건 가리지 않고, 터미널에 이유를 알려줍니다!
+            print(f"🚨 방어막 에러 발생: {e}")
+            return "0_normal" # 에러 시 일단 정상으로 넘겨서 시스템 멈춤 방지
 
-        self.pose = mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            enable_segmentation=False,
-            min_detection_confidence=self.detection_confidence,
-            min_tracking_confidence=self.tracking_confidence,
-        )
-
-        self.attention_analyzer = AttentionAnalyzer(config=self.attention_config)
-        self.eye_focus_analyzer = EyeFocusAnalyzer()
-
-    def _update_head_pose_state(self, face_landmarks, frame) -> None:
-        frame_height, frame_width = frame.shape[:2]
-        pose = self.head_pose_estimator.estimate(face_landmarks, frame_width, frame_height)
-        if pose is not None:
-            self.pose_angles = pose
-
-    def _draw_head_pose_landmark_indices(self, frame, face_landmarks) -> None:
-        frame_height, frame_width = frame.shape[:2]
-        debug_points = {"nose_tip": 1, "chin": 152, "left_eye_outer": 263, "right_eye_outer": 33, "left_mouth": 291, "right_mouth": 61}
-        for name, idx in debug_points.items():
-            landmark = face_landmarks.landmark[idx]
-            x, y = int(landmark.x * frame_width), int(landmark.y * frame_height)
-            cv2.circle(frame, (x, y), 4, (0, 0, 255), -1)
-            cv2.putText(frame, f"{name}:{idx}", (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
-
-    # 🌟 2. 얼굴 Bounding Box 추출
-    def _get_crop_img(self, frame, face_landmarks, indices, w, h, padding=15):
-        """MediaPipe 랜드마크를 기반으로 눈/입술 특정 부위만 쏙 잘라옵니다."""
-        x_coords = [int(face_landmarks.landmark[i].x * w) for i in indices]
-        y_coords = [int(face_landmarks.landmark[i].y * h) for i in indices]
-        x_min, x_max = max(0, min(x_coords) - padding), min(w, max(x_coords) + padding)
-        y_min, y_max = max(0, min(y_coords) - padding), min(h, max(y_coords) + padding)
-
-        if x_max <= x_min or y_max <= y_min: 
+    def _calculate_ear(self, eye_points):
+        """Eye Aspect Ratio(EAR) 계산"""
+        try:
+            v1 = dist.euclidean(eye_points[1], eye_points[5])
+            v2 = dist.euclidean(eye_points[2], eye_points[4])
+            h = dist.euclidean(eye_points[0], eye_points[3])
+            return (v1 + v2) / (2.0 * h)
+        except:
             return None
 
-        crop = frame[y_min:y_max, x_min:x_max]
-        img_resized = cv2.resize(crop, (224, 224))
-        img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-        
-        # 🚨 [버그 수정] 전처리(preprocess_input) 중복 제거! (모델 안에 이미 내장됨)
-        return img_rgb
-
-    # 🌟 3. CNN 모델 추론 및 스무딩
-    def _check_cnn_state(self, frame, face_landmarks):
-        """눈, 입술을 각각 잘라 CNN에 넣고 하나라도 비정상이면 알람을 울립니다."""
-        if self.defense_model is None:
-            return False
-            
-        h, w = frame.shape[:2]
-        MOUTH_INDICES = [61, 291, 39, 181, 0, 17, 269, 405]
-
-        # 🌟 입술(하관) 크롭 패딩을 20 -> 60으로 대폭 늘려 훈련 데이터와 환경을 맞춥니다!
-        left_eye = self._get_crop_img(frame, face_landmarks, self.LEFT_EYE, w, h, padding=15)
-        right_eye = self._get_crop_img(frame, face_landmarks, self.RIGHT_EYE, w, h, padding=15)
-        mouth = self._get_crop_img(frame, face_landmarks, MOUTH_INDICES, w, h, padding=60)
-
-        imgs = [img for img in [left_eye, right_eye, mouth] if img is not None]
-        if not imgs:
-            return False
-
-        img_array = np.array(imgs).astype(np.float32)
-        predictions = self.defense_model.predict(img_array, verbose=0)
-        
-        # 🌟 터미널에 실시간으로 확률을 찍어봅니다. (어디가 문제인지 1초 만에 파악 가능!)
-        if len(predictions) == 3:
-            print(f"[CNN 분석] 좌안: {predictions[0][1]*100:.1f}% | 우안: {predictions[1][1]*100:.1f}% | 입(하관): {predictions[2][1]*100:.1f}%")
-
-        max_abnormal_prob = float(np.max(predictions[:, 1]))
-        
-        self.cnn_prob_buffer.append(max_abnormal_prob)
-        smooth_prob = sum(self.cnn_prob_buffer) / len(self.cnn_prob_buffer)
-        
-        # 🌟 임계치를 0.85로 높여서 진짜 확실하게 졸거나 하품할 때만 잡게 만듭니다.
-        return smooth_prob > 0.77
-
-    def draw_mediapipe(self, frame):
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        rgb_for_inference = cv2.resize(rgb, None, fx=self.process_scale, fy=self.process_scale, interpolation=cv2.INTER_LINEAR) if 0 < self.process_scale < 1.0 else rgb
-
-        results = self.face_mesh.process(rgb_for_inference)
-        self.face_detected = bool(results.multi_face_landmarks)
-
-        pose_results = self.pose.process(rgb)
-        if pose_results.pose_landmarks:
-            self.upper_body_state = self.upper_body_analyzer.estimate(pose_results.pose_landmarks, frame.shape[1], frame.shape[0])
-        else:
-            self.upper_body_state = UpperBodyState()
-
-        if self.draw_upper_body_indices and self.upper_body_state.body_visible:
-            display_names = {"left_shoulder": "L_shoulder", "right_shoulder": "R_shoulder", "left_elbow": "L_elbow", "right_elbow": "R_elbow"}
-            for name, (x, y) in self.upper_body_state.landmark_points.items():
-                idx = UPPER_BODY_LANDMARKS[name]
-                label = display_names[name]
-                cv2.circle(frame, (x, y), 5, (255, 0, 0), -1)
-                cv2.putText(frame, f"{label}:{idx}", (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1)
-
-        if results.multi_face_landmarks:
-            self.current_face_landmarks = results.multi_face_landmarks[0]
-            for face_landmarks in results.multi_face_landmarks:
-                self._update_head_pose_state(face_landmarks, frame)
-                eye_result = self.eye_focus_analyzer.analyze(frame, face_landmarks)
-                self.gaze_direction = eye_result.gaze_direction
-                self.blink_bpm = eye_result.blink_bpm
-                self.eye_focus_score = eye_result.eye_focus_score
-                self.eye_status_msg = eye_result.eye_status_msg
-
-                if self.draw_head_pose_indices: self._draw_head_pose_landmark_indices(frame, face_landmarks)
-                if self.draw_tesselation:
-                    mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_TESSELATION, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style())
-                mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_CONTOURS, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
-                if self.refine_landmarks:
-                    mp_drawing.draw_landmarks(image=frame, landmark_list=face_landmarks, connections=mp_face_mesh.FACEMESH_IRISES, landmark_drawing_spec=None, connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style())
-
-            cv2.putText(frame, f"MediaPipe Face Mesh | faces: {len(results.multi_face_landmarks)} | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            cv2.putText(frame, f"Yaw: {self.pose_angles.yaw:.1f} | Pitch: {self.pose_angles.pitch:.1f} | Roll: {self.pose_angles.roll:.1f}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
-        else:
-            self.current_face_landmarks = None
-            self.pose_angles = PoseAngles()
-            self.face_detected = False
-            self.eye_focus_analyzer.reset()
-            self.gaze_direction = "Unknown"
-            self.blink_bpm = 0
-            self.eye_focus_score = 0.0
-            self.eye_status_msg = "Face Not Detected (Eye disabled)"
-            cv2.putText(frame, f"MediaPipe Face Mesh | no face | scale: {self.process_scale:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            
-        if self.upper_body_state.body_visible:
-            cv2.putText(frame, f"Shoulder Tilt: {self.upper_body_state.shoulder_tilt:.1f}", (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (200, 255, 0), 2)
-
-        return frame
-
-    def seek_frames(self, offset_frames: int) -> None:
-        if not self.is_video_file: return
-        base_frame = self.current_frame_idx
-        if base_frame < 0: base_frame = max(0, int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1)
-        target_frame = base_frame + offset_frames
-        if self.total_frames > 0: target_frame = max(0, min(target_frame, self.total_frames - 1))
-        else: target_frame = max(0, target_frame)
-        self.current_frame_idx = target_frame
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-
-    def show_current_frame(self) -> None:
-        if not self.is_video_file or self.current_frame_idx < 0: return
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_idx)
-        ret, frame = self.cap.read()
-        if not ret: return
-        output = self.process_frame(frame)
-        cv2.imshow("Face Analyzer", output)
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_idx + 1)
-
-    def process_frame(self, frame):
-        output = self.draw_mediapipe(frame)
-
-        # 🌟 4. CNN 방어막 가동
-        is_drowsy = False
-        if self.face_detected and self.current_face_landmarks:
-            is_drowsy = self._check_cnn_state(frame, self.current_face_landmarks)
-
+    def _get_gaze_ratio(self, eye_points, iris_points):
+        """시선 방향 계산"""
         try:
-            attention_state = self.attention_analyzer.update(
-                pose_angles=self.pose_angles,
-                body_tilt=self.upper_body_state.shoulder_tilt,
-                face_detected=self.face_detected,
-                dt=1.0 / max(self.fps, 1e-6),
-                gaze_direction=self.gaze_direction,
-                blink_bpm=self.blink_bpm,
-                eye_focus_score=self.eye_focus_score,
-                eye_status_msg=self.eye_status_msg,
-                is_drowsy=is_drowsy
-            )
-        except TypeError:
-            attention_state = self.attention_analyzer.update(
-                pose_angles=self.pose_angles,
-                body_tilt=self.upper_body_state.shoulder_tilt,
-                face_detected=self.face_detected,
-                dt=1.0 / max(self.fps, 1e-6),
-                gaze_direction=self.gaze_direction,
-                blink_bpm=self.blink_bpm,
-                eye_focus_score=self.eye_focus_score,
-                eye_status_msg=self.eye_status_msg
-            )
-            if is_drowsy:
-                cv2.putText(output, "🚨 DROWSY (Update logic!)", (10, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            eye_corners_x = sorted([eye_points[0][0], eye_points[3][0]])
+            eye_x_min, eye_x_max = eye_corners_x[0], eye_corners_x[1]
+            iris_center_x = np.mean(iris_points, axis=0)[0]
 
-        # UI 출력부
-        state_color = (0, 0, 255) if getattr(attention_state, 'state', '') == "DROWSY" else (255, 180, 0)
-        cv2.putText(output, f"Attention: {attention_state.state} | Score: {attention_state.score:.1f}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, state_color, 2)
-        cv2.putText(output, f"Head: {attention_state.head_duration:.1f}s | Body: {attention_state.body_duration:.1f}s", (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 180, 0), 2)
-        cv2.putText(output, f"Gaze: {self.gaze_direction} | BPM: {self.blink_bpm} | EyeScore: {self.eye_focus_score:.1f}", (10, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 255, 180), 2)
+            total_width = eye_x_max - eye_x_min
+            if total_width <= 0: return 0.5, 0
 
-        fixation_status = "FIXATED" if self.attention_analyzer._is_screen_fixated() else "NOT FIXATED"
-        cv2.putText(output, f"Fixation: {fixation_status}", (10, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        cv2.putText(output, f"EyeStatus: {attention_state.eye_status_msg}", (10, 250), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 255, 180), 2)
+            return (iris_center_x - eye_x_min) / total_width, total_width
+        except:
+            return 0.5, 0
 
-        status_text = "PAUSED" if self.is_paused else "PLAYING"
-        cv2.putText(output, f"{status_text} | fps: {self.fps:.1f} | q: quit", (10, self.frame_height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-        return output
+    def analyze(self, frame):
+        """메인 분석 함수"""
+        h, w, _ = frame.shape
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(rgb_frame)
+        
+        status = {"bpm": len(self.blink_timestamps), "gaze": "Center", "focus_score": self.last_score, "msg": "Analyzing...", "edge_case": False}
 
-    def handle_key(self, key: int) -> bool:
-        if key == ord("q"): return False
-        if key == ord(" "):
-            self.is_paused = not self.is_paused
-            return True
-        if key == ord("a"):
-            self.seek_frames(-int(self.fps * 5))
-            if self.is_paused: self.show_current_frame()
-            return True
-        if key == ord("d"):
-            self.seek_frames(int(self.fps * 5))
-            if self.is_paused: self.show_current_frame()
-            return True
-        if key == ord("j"):
-            self.seek_frames(-int(self.fps))
-            if self.is_paused: self.show_current_frame()
-            return True
-        if key == ord("l"):
-            self.seek_frames(int(self.fps))
-            if self.is_paused: self.show_current_frame()
-            return True
-        return True
+        if not results.multi_face_landmarks:
+            status["msg"] = "Face Not Detected"
+            status["focus_score"] = 0
+            self.last_score = 0
+            return status
 
-    def run(self) -> None:
-        print("[INFO] 실행 시작")
-        print("[INFO] 단축키: q 종료 | space 일시정지/재생 | a/d 5초 이동 | j/l 1초 이동")
-        while True:
-            if not self.is_paused:
-                ret, frame = self.cap.read()
-                if not ret: break
-                self.current_frame_idx = max(0, int(self.cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1)
-                output = self.process_frame(frame)
-                cv2.imshow("Face Analyzer", output)
-                if self.writer is not None: self.writer.write(output)
+        face_landmarks = results.multi_face_landmarks[0]
 
-            wait_time = 30 if self.is_paused else self.frame_delay_ms
-            key = cv2.waitKey(wait_time) & 0xFF
-            if key != 255:
-                if not self.handle_key(key): break
-        self.release()
+        # 🌟 1. 방어막 가동 (Edge Case 검사)
+        eye_state = self._check_edge_case(frame, face_landmarks, w, h)
+        
+        if eye_state != '0_normal':
+            # 악조건(빛반사, 가려짐) 감지 시: EAR 및 Gaze 계산을 '스킵'하고 직전 상태 유지
+            status["edge_case"] = True
+            if eye_state == '1_glare':
+                status["msg"] = "Shield Active: Glare (Paused)"
+            else:
+                status["msg"] = "Shield Active: Occlusion (Paused)"
+            return status # 계산하지 않고 바로 리턴!
 
-    def release(self) -> None:
-        self.cap.release()
-        if self.writer is not None: self.writer.release()
-        cv2.destroyAllWindows()
-        self.face_mesh.close()
+        # 🌟 2. 정상 상태일 때만 아래 MediaPipe 로직(EAR, Gaze) 수행
+        def get_coords(indices):
+            return [(int(face_landmarks.landmark[i].x * w), int(face_landmarks.landmark[i].y * h)) for i in indices]
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="학습 집중도 분석 시스템")
-    parser.add_argument("--source", type=str, default="webcam")
-    parser.add_argument("--save-path", type=str, default=None)
-    parser.add_argument("--max-num-faces", type=int, default=1)
-    parser.add_argument("--detection-confidence", type=float, default=0.5)
-    parser.add_argument("--tracking-confidence", type=float, default=0.5)
-    parser.add_argument("--refine-landmarks", action="store_true", default=True)
-    parser.add_argument("--process-scale", type=float, default=0.75)
-    parser.add_argument("--draw-tesselation", action="store_true")
-    parser.add_argument("--draw-head-pose-indices", action="store_true")
-    parser.add_argument("--draw-upper-body-indices", action="store_true")
-    return parser
+        left_eye_coords = get_coords(self.LEFT_EYE)
+        right_eye_coords = get_coords(self.RIGHT_EYE)
+        left_iris_coords = get_coords(self.LEFT_IRIS)
+        right_iris_coords = get_coords(self.RIGHT_IRIS)
+        
+        ear_l = self._calculate_ear(left_eye_coords)
+        ear_r = self._calculate_ear(right_eye_coords)
+        
+        if ear_l and ear_r:
+            avg_ear = (ear_l + ear_r) / 2.0
+            self.ear_buffer.append(avg_ear)
+            smooth_ear = sum(self.ear_buffer) / len(self.ear_buffer)
+            
+            if not self.is_calibrated:
+                self.calibration_frames += 1
+                self.base_ear += smooth_ear
+                status["msg"] = f"Calibrating... {self.calibration_frames}%"
+                if self.calibration_frames >= self.MAX_CALIB_FRAMES:
+                    self.base_ear /= self.MAX_CALIB_FRAMES
+                    self.is_calibrated = True
+                return status
 
-def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
+            # BPM 계산
+            current_time = time.time()
+            blink_threshold = self.base_ear * 0.75
+            
+            if smooth_ear < blink_threshold:
+                if not self.eye_closed:
+                    self.blink_timestamps.append(current_time)
+                    self.eye_closed = True
+            else:
+                self.eye_closed = False
 
-    attention_config = AttentionConfig(
-        yaw_threshold=DEFAULT_RUNTIME_CONFIG.yaw_threshold,
-        pitch_threshold=DEFAULT_RUNTIME_CONFIG.pitch_threshold,
-        roll_threshold=DEFAULT_RUNTIME_CONFIG.roll_threshold,
-        focused_yaw_threshold=DEFAULT_RUNTIME_CONFIG.focused_yaw_threshold,
-        focused_pitch_threshold=DEFAULT_RUNTIME_CONFIG.focused_pitch_threshold,
-        focused_roll_threshold=DEFAULT_RUNTIME_CONFIG.focused_roll_threshold,
-        lost_focus_time=DEFAULT_RUNTIME_CONFIG.lost_focus_time,
-        no_face_time=DEFAULT_RUNTIME_CONFIG.no_face_time,
-        smoothing_alpha=DEFAULT_RUNTIME_CONFIG.smoothing_alpha,
-        recovery_speed=DEFAULT_RUNTIME_CONFIG.recovery_speed,
-    )
+            while self.blink_timestamps and current_time - self.blink_timestamps[0] > 60:
+                self.blink_timestamps.popleft()
+            
+            current_bpm = len(self.blink_timestamps)
+            status["bpm"] = current_bpm
 
-    analyzer = VideoFaceAnalyzer(
-        source=args.source,
-        save_path=args.save_path,
-        max_num_faces=args.max_num_faces,
-        detection_confidence=args.detection_confidence,
-        tracking_confidence=args.tracking_confidence,
-        refine_landmarks=args.refine_landmarks,
-        process_scale=args.process_scale,
-        draw_tesselation=args.draw_tesselation,
-        draw_head_pose_indices=args.draw_head_pose_indices,
-        draw_upper_body_indices=args.draw_upper_body_indices,
-        attention_config=attention_config,
-    )
-    analyzer.run()
+            # 시선 추적
+            ratio_l, width_l = self._get_gaze_ratio(left_eye_coords, left_iris_coords)
+            ratio_r, width_r = self._get_gaze_ratio(right_eye_coords, right_iris_coords)
+            current_gaze_ratio = ratio_l if width_l > width_r else ratio_r
 
-# 이 엔진이 없어서 아까 소리 소문 없이 끝난 겁니다! 😂
+            self.gaze_buffer.append(current_gaze_ratio)
+            smooth_gaze = sum(self.gaze_buffer) / len(self.gaze_buffer)
+
+            if smooth_gaze < 0.44: status["gaze"] = "Left"
+            elif smooth_gaze > 0.62: status["gaze"] = "Right"
+            else: status["gaze"] = "Center"
+
+            # 집중도 판별
+            self.gaze_variance_buffer.append(smooth_gaze)
+            gaze_variance = np.var(self.gaze_variance_buffer) if len(self.gaze_variance_buffer) > 20 else 1.0
+            elapsed_time = current_time - self.start_time
+
+            if status["gaze"] != "Center":
+                status["msg"] = "Distracted (Looking Away)"
+                status["focus_score"] = 40
+            elif current_bpm > 15:
+                status["msg"] = "Anxious/Distracted (High BPM)"
+                status["focus_score"] = 60
+            elif elapsed_time > 10 and current_bpm < 3 and gaze_variance < 0.0005:
+                status["msg"] = "Spacing Out (Low BPM & Fixed Gaze)"
+                status["focus_score"] = 50
+            else:
+                status["msg"] = "Focused (Optimal)"
+                status["focus_score"] = 100
+
+            self.last_score = status["focus_score"] # 정상 점수 업데이트
+
+        return status
+
+# --- 테스트 실행부 ---
 if __name__ == "__main__":
-    main()
+    cap = cv2.VideoCapture(0)
+    analyzer = FocusAnalyzer()
+
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success: break
+
+        frame = cv2.flip(frame, 1) # 좌우 반전
+        res = analyzer.analyze(frame)
+        
+        # 🌟 UI 표시 분기 처리 (방어막 작동 시 UI 색상 변경)
+        msg_color = (0, 255, 255) if res.get('edge_case') else ((0, 0, 255) if res['focus_score'] < 80 else (0, 255, 0))
+        
+        cv2.putText(frame, f"Gaze: {res['gaze']}", (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if res['gaze'] == "Center" else (0, 0, 255), 2)
+        cv2.putText(frame, f"BPM: {res['bpm']}", (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if 3 <= res['bpm'] <= 15 else (0, 165, 255), 2)
+        cv2.putText(frame, f"Score: {res['focus_score']}", (30, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+        cv2.putText(frame, f"Status: {res['msg']}", (30, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, msg_color, 2)
+
+        cv2.imshow('Education Focus Monitor', frame)
+        if cv2.waitKey(5) & 0xFF == 27: break
+
+    cap.release()
+    cv2.destroyAllWindows()
