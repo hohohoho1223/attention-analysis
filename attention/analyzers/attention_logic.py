@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from head_pose import PoseAngles
+from attention.analyzers.head_pose import PoseAngles
 
 
 @dataclass(frozen=True)
