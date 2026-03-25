@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from attention.analyzers.attention_logic import AttentionState
-from attention.analyzers.head_pose import PoseAngles
-from attention.analyzers.upperbody_pose import UpperBodyState
+from ai.attention.analyzers.attention_logic import AttentionState
+from ai.attention.analyzers.head_pose import PoseAngles
+from ai.attention.analyzers.upperbody_pose import UpperBodyState
 
 
 @dataclass

@@ -7,11 +7,11 @@ from typing import Optional
 import mediapipe as mp
 import numpy as np
 
-from attention.analyzers.attention_logic import AttentionAnalyzer, AttentionConfig
-from attention.analyzers.eye_focus import EyeFocusAnalyzer
-from attention.analyzers.head_pose import HeadPoseEstimator, PoseAngles
-from attention.analyzers.upperbody_pose import UpperBodyAnalyzer, UpperBodyState
-from attention.schemas import AttentionFrameResult
+from ai.attention.analyzers.attention_logic import AttentionAnalyzer, AttentionConfig
+from ai.attention.analyzers.eye_focus import EyeFocusAnalyzer
+from ai.attention.analyzers.head_pose import HeadPoseEstimator, PoseAngles
+from ai.attention.analyzers.upperbody_pose import UpperBodyAnalyzer, UpperBodyState
+from ai.attention.schemas import AttentionFrameResult
 
 try:
     import cv2

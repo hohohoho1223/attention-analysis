@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import mediapipe as mp
-from attention.analyzers.attention_logic import AttentionConfig, DEFAULT_ATTENTION_CONFIG
-from attention.analyzers.head_pose import PoseAngles
-from attention.analyzers.upperbody_pose import UPPER_BODY_LANDMARKS, UpperBodyState
-from attention.pipeline import AttentionPipeline
+from ai.attention.analyzers.attention_logic import AttentionConfig, DEFAULT_ATTENTION_CONFIG
+from ai.attention.analyzers.head_pose import PoseAngles
+from ai.attention.analyzers.upperbody_pose import UPPER_BODY_LANDMARKS, UpperBodyState
+from ai.attention.pipeline import AttentionPipeline
 
 try:
     import cv2
