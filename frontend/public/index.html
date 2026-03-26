@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>학습 집중도 분석 시스템</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
+  <style>
+    body {
+      margin: 0; display: flex; justify-content: center; align-items: center;
+      height: 100vh; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif;
+    }
+    .login-container {
+      background: white; padding: 50px 40px; border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px;
+    }
+    .logo-text {
+      color: #FF7710; /* 멋쟁이사자처럼 시그니처 오렌지 */
+      font-size: 28px; font-weight: bold; margin-bottom: 10px;
+    }
+    .sub-text {
+      color: #666; font-size: 14px; margin-bottom: 40px;
+    }
+    .google-btn {
+      width: 100%; padding: 12px; background-color: white; border: 1px solid #ddd;
+      border-radius: 6px; font-size: 15px; font-weight: bold; color: #333;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: background 0.2s;
+    }
+    .google-btn:hover { background-color: #f1f1f1; }
+  </style>
+</head>
+<body>
+
+  <div class="login-container">
+    <div class="logo-text">멋쟁이사자처럼</div>
+    <div class="sub-text">학습 집중도 분석 시스템</div>
+    
+    <button class="google-btn" id="googleLoginBtn">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20">
+      구글 로그인
+    </button>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  
+  <script>
+    // 🌟 로그인 및 관리자/학생 권한 분기 로직
+    document.getElementById('googleLoginBtn').addEventListener('click', () => {
+      auth.signInWithPopup(googleProvider)
+        .then((result) => {
+          const user = result.user;
+          console.log("로그인 성공:", user.email);
+          
+          // 🚨 관리자 이메일을 여기에 하드코딩해둡니다 (추후 DB 연동 가능)
+          const adminEmails = ['slee9219@gmail.com', 'admin@mutsa.com']; 
+          
+          if (adminEmails.includes(user.email)) {
+            alert(`관리자 ${user.displayName}님 환영합니다.`);
+            window.location.href = '/admin_dashboard.html'; // 관리자 페이지로 이동 (나중에 만들 예정)
+          } else {
+            alert(`학생 ${user.displayName}님 환영합니다.`);
+            window.location.href = '/student_dashboard.html'; // 아까 이름 바꾼 달력 페이지로 이동!
+          }
+        })
+        .catch((error) => {
+          console.error("로그인 에러:", error);
+          alert("구글 로그인에 실패했습니다.");
+        });
+    });
+  </script>
+</body>
+</html>

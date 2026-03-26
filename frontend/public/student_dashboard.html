@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>학생 대시보드 - 멋쟁이사자처럼</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+  <style>
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+    header { width: 100%; padding: 20px; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 40px; }
+    .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
+    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
+    #input-section { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px; z-index: 10; position: relative;}
+    .input-group { margin-bottom: 20px; text-align: left; }
+    .input-group label { display: block; font-size: 13px; color: #555; margin-bottom: 8px; }
+    .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+    .submit-btn { width: 100%; padding: 12px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .submit-btn:hover { background-color: #e66a00; }
+    #webcam-section { display: none; width: 80%; max-width: 800px; text-align: center; }
+    .welcome-msg { font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #333; display: flex; justify-content: center; align-items: center; gap: 15px; }
+    .video-container { position: relative; width: 100%; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; }
+    .waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; z-index: 10; transition: opacity 0.5s ease; }
+    .exit-btn { background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; font-weight: bold; }
+    .exit-btn:hover { background-color: #c82333; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-text">멋쟁이사자처럼</div>
+    <div class="sub-text">AI NL 5기 과정 - 학습 집중도 분석 시스템</div>
+  </header>
+
+  <div id="input-section">
+    <div class="input-group">
+      <label>이름</label>
+      <input type="text" id="studentName" placeholder="홍길동">
+    </div>
+    <div class="input-group">
+      <label>과정명</label>
+      <select id="courseName">
+        <option value="AI NL 5기">AI NL 5기</option>
+        <option value="AI CV 4기">AI CV 4기</option>
+        <option value="프론트엔드 3기">프론트엔드 3기</option>
+      </select>
+    </div>
+    <button class="submit-btn" id="submitBtn">수업 입장하기</button>
+  </div>
+
+  <div id="webcam-section">
+    <div class="welcome-msg">
+      🦁 <span id="display-name"></span>님 환영합니다!
+      <button class="exit-btn" id="exitBtn">수업 나가기</button>
+    </div>
+    <div class="video-container">
+      <video id="webcam" autoplay playsinline muted></video>
+      <canvas id="output_canvas"></canvas>
+      <div class="waiting-overlay" id="waitingOverlay">수업이 시작될 때까지 대기해주세요 ⏳</div>
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/ai_logic.js"></script> 
+  
+  <script>
+    const submitBtn = document.getElementById('submitBtn');
+    const exitBtn = document.getElementById('exitBtn');
+    const inputSection = document.getElementById('input-section');
+    const webcamSection = document.getElementById('webcam-section');
+    const displayName = document.getElementById('display-name');
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const waitingOverlay = document.getElementById('waitingOverlay');
+
+    let myDocRef = null; 
+    let isClassStarted = false; 
+    let aiInterval = null; 
+    let lastAnalyzeTime = Date.now(); 
+
+    const headPoseEstimator = new HeadPoseEstimator();
+    const eyeFocusAnalyzer = new EyeFocusAnalyzer();
+    const attentionAnalyzer = new AttentionAnalyzer();
+
+    const faceMesh = new FaceMesh({locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+    }});
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults((results) => {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      
+      const currentTime = Date.now();
+      const dt = (currentTime - lastAnalyzeTime) / 1000.0; 
+      lastAnalyzeTime = currentTime;
+
+      let faceDetected = false;
+      let poseAngles = new PoseAngles();
+      let eyeResult = new EyeFocusResult();
+
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        faceDetected = true;
+        const landmarks = results.multiFaceLandmarks[0];
+
+        drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
+
+        poseAngles = headPoseEstimator.estimate(landmarks);
+        eyeResult = eyeFocusAnalyzer.analyze(landmarks);
+      }
+
+      // 🌟 수학적 고개/눈동자 추적 로직만 가동 (CNN 제외)
+      const attentionState = attentionAnalyzer.update(poseAngles, 0.0, faceDetected, dt, eyeResult, false);
+
+      if (myDocRef && isClassStarted) {
+        let statusKorean = "대기중";
+        if (attentionState.state === "FOCUSED") statusKorean = "집중";
+        else if (attentionState.state === "PARTIAL_FOCUS") statusKorean = "집중 저하";
+        else if (attentionState.state === "LOST_FOCUS") statusKorean = "이탈/졸음";
+        else if (attentionState.state === "ABSENT") statusKorean = "자리이탈";
+
+        myDocRef.update({ 
+          status: statusKorean, 
+          score: Math.round(attentionState.score) + '%', 
+          lastActive: Date.now() 
+        });
+      }
+      canvasCtx.restore();
+    });
+
+    submitBtn.addEventListener('click', async () => {
+      const name = document.getElementById('studentName').value;
+      if (!name) { alert('이름을 입력해주세요!'); return; }
+
+      displayName.textContent = name;
+      inputSection.style.display = 'none';
+      webcamSection.style.display = 'block';
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoElement.srcObject = stream;
+      } catch (err) {
+        alert("웹캠 권한을 허용해야 합니다!");
+        return; 
+      }
+
+      const course = document.getElementById('courseName').value;
+      myDocRef = db.collection('active_students').doc(name);
+      await myDocRef.set({ name: name, course: course, status: '대기중', score: '-', warnings: 0, timestamp: firebase.firestore.FieldValue.serverTimestamp(), lastActive: Date.now() });
+
+      let isProcessingFace = false;
+      aiInterval = setInterval(async () => {
+        if (videoElement.readyState >= 2 && isClassStarted && !isProcessingFace) {
+          isProcessingFace = true;
+          try { await faceMesh.send({image: videoElement}); } catch(e){}
+          isProcessingFace = false;
+        }
+      }, 500); 
+
+      setInterval(() => {
+        if (myDocRef) myDocRef.update({ lastActive: Date.now() }).catch(e=>{});
+      }, 5000);
+
+      db.collection('settings').doc('class_status').onSnapshot((doc) => {
+        if (doc.exists) {
+          isClassStarted = doc.data().is_class_started;
+          if (isClassStarted) {
+            waitingOverlay.style.opacity = '0';
+            setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
+          } else {
+            waitingOverlay.style.display = 'flex';
+            setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
+            if (canvasCtx) canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            if (myDocRef) myDocRef.update({ status: '대기중', score: '-', lastActive: Date.now() });
+          }
+        }
+      });
+    });
+
+    exitBtn.addEventListener('click', async () => {
+      if (confirm("수업에서 완벽하게 나가시겠습니까?")) {
+        if (aiInterval) clearInterval(aiInterval);
+        if (myDocRef) await myDocRef.delete();
+        window.location.href = '/'; 
+      }
+    });
+
+    window.addEventListener('unload', () => {
+      if (myDocRef) myDocRef.delete(); 
+    });
+  </script>
+</body>
+</html>
