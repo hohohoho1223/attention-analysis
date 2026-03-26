@@ -23,7 +23,7 @@ class Buffers:
     yaw: list = field(default_factory=list)
     roll: list = field(default_factory=list)
     gaze_ratio: list = field(default_factory=list)
-    blink: list = field(default_factory=list)
+    ear: list = field(default_factory=list) # Eye Aspect Ratio
 
 WINDOW_SIZE=30
 
@@ -52,7 +52,7 @@ def extract_image_feature(file_path,draw=True):
 
         # 초기값 설정 
         pitch, yaw, roll = None, None, None #얼굴 인식 실패 시 기본값
-        gaze_ratio = None #시선 방향
+        gaze_ratio, ear = None, None #시선 방향
         ih, iw, _ = image.shape #높이 및 너비 기본값
 
         # 매 프레임마다 버퍼 리셋
@@ -77,6 +77,7 @@ def extract_image_feature(file_path,draw=True):
                 # gaze 
                 eyes_result = eyes_analyzer.analyze(image, face_landmarks)
                 gaze_ratio = eyes_result.smooth_gaze_ratio
+                ear = eyes_result.smooth_ear
 
                 
         img_id = file.partition('.')[0]
@@ -90,6 +91,7 @@ def extract_image_feature(file_path,draw=True):
                 'yaw': yaw,
                 'roll': roll,
                 'gaze_ratio': gaze_ratio,
+                'ear': ear,
             }
 
     return lm_dic
@@ -152,7 +154,7 @@ def extract_video_feature(video_path, draw=False):
 
         # 초기값 설정 
         pitch, yaw, roll = None, None, None #얼굴 인식 실패 시 기본값
-        gaze_ratio, blink = None, None #시선 방향
+        gaze_ratio, ear = None, None #시선 방향, 눈 종횡비
         ih, iw, _ = frame.shape #높이 및 너비 기본값
 
         if results.multi_face_landmarks:
@@ -173,7 +175,7 @@ def extract_video_feature(video_path, draw=False):
                 # gaze 
                 eyes_result = eyes_analyzer.analyze(frame, face_landmarks)
                 gaze_ratio = eyes_result.smooth_gaze_ratio
-                blink = eyes_result.blink_bpm
+                ear = eyes_result.smooth_ear
 
 
         # 결과        
@@ -183,7 +185,7 @@ def extract_video_feature(video_path, draw=False):
             buffers.yaw.append(yaw)
             buffers.roll.append(roll)
             buffers.gaze_ratio.append(gaze_ratio)
-            buffers.blink.append(blink)
+            buffers.ear.append(ear)
         
         if len(buffers.lm) == WINDOW_SIZE: # 버퍼가 X프레임 찼는지 확인
             row = _build_feature_vid(vid_id, window_idx, buffers)
@@ -212,8 +214,7 @@ def _build_feature_img(landmark, label, include_blink):
         row['yaw'] = data['yaw']
         row['roll'] = data['roll']
         row['gaze_ratio'] = data['gaze_ratio']
-        if include_blink:
-            row['blink'] = data['blink']
+        row['ear'] = data['ear']
         row['Label'] = label
         rows.append(row)
     df = pd.DataFrame(rows)
@@ -236,10 +237,19 @@ def _build_feature_vid(vid_id, window_idx, buffers):
 
     row = {'vid_id': vid_id, 'window_id': window_idx}
 
-    # 차분 계산 (익명함수 lambda 사용)
-    get_diff_mean = lambda data:np.mean(np.abs(np.diff(data))) if len(data) > 1 else 0
+    # 평균 계산
+    get_mean = lambda data: np.mean(data) if len(data) > 0 else 0
     # 분산 계산
     get_std = lambda data: np.std(data) if len(data) > 1 else 0
+    # 차분 mean 계산 (익명함수 lambda 사용)
+    get_diff_mean = lambda data: np.mean(np.abs(np.diff(data))) if len(data) > 1 else 0
+    # 차분 max 계산
+    get_diff_max = lambda data: np.max(np.abs(np.diff(data))) if len(data) > 1 else 0
+    # range 계산
+    get_range = lambda data: np.max(data) - np.min(data) if len(data) > 0 else 0
+    # slope 계산
+    calculate_slope = lambda d: float(np.polyfit(np.arange(len(d)), d, 1)[0]) if len(d) > 1 else 0.0
+    
 
     # lm
     for i in range(468): # vid는 len(lm_list) != 0 <- 여기서 0을 거르기 때문에 항상 468 보장
@@ -251,9 +261,8 @@ def _build_feature_vid(vid_id, window_idx, buffers):
         if i == 0 and window_idx == 0: # 첫 번째 랜드마크만 샘플로 확인
             print(f"[DEBUG] x_norm sample (lm 0): {x_norm[:3]}")
 
-        # lm의 프레임 간 움직임 차이
-        row[f'x{i}_diff_mean'] = get_diff_mean(x_norm)
-        row[f'y{i}_diff_mean']  = get_diff_mean(y_norm)
+        row[f'x{i}_mean'] = get_mean(x_norm)
+        row[f'y{i}_mean']  = get_mean(y_norm)
 
         row[f'x{i}_std']  = get_std(x_norm)
         row[f'y{i}_std']  = get_std(y_norm)
@@ -264,8 +273,11 @@ def _build_feature_vid(vid_id, window_idx, buffers):
         'pitch_diff_mean': get_diff_mean(buffers.pitch), 'pitch_std': get_std(buffers.pitch),
         'yaw_diff_mean': get_diff_mean(buffers.yaw),     'yaw_std': get_std(buffers.yaw),
         'roll_diff_mean': get_diff_mean(buffers.roll),   'roll_std': get_std(buffers.roll),
-        'gaze_diff_mean': get_diff_mean(buffers.gaze_ratio),   'gaze_std': get_std(buffers.gaze_ratio),
-        'blink_diff_mean': get_diff_mean(buffers.blink),
+        # 'gaze_diff_mean': get_diff_mean(buffers.gaze_ratio),   'gaze_std': get_std(buffers.gaze_ratio),
+        'gaze_diff_max': get_diff_max(buffers.gaze_ratio),   'gaze_range': get_range(buffers.gaze_ratio),
+        # 'ear_mean': get_mean(buffers.ear), 'ear_std': get_std(buffers.ear),
+        # 'ear_diff_mean': get_diff_mean(buffers.ear)
+        'ear_slope': calculate_slope(buffers.ear)
     })
 
     return row

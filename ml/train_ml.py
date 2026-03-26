@@ -95,14 +95,14 @@ def train():
 
     path_trainedmodel = f"./ml/trained_models_{MODE}"
 
-    for i in range(4):
+    for i in range(6):
         print(f"--- S{i} 세트 데이터 정보 ---")
         print(f"X_train shape: {training_data[i]['X_train'].shape}")
         print(f"X_test shape: {training_data[i]['X_test'].shape}") # 여기가 102개인지 반드시 확인
         print(f"Y_test shape: {training_data[i]['Y_test'].shape}")
 
     #train the feature sets with our classifiction models
-    for i in range(4):
+    for i in range(6):
         temp , plot, plot_cm= obj.classifier_result(training_data[i],i,path_trainedmodel)
         print(temp)
         #save the result in dfML_result dataframe
@@ -112,7 +112,7 @@ def train():
 
     #save the results and the plots
     os.makedirs(f'./ml/results_{MODE}', exist_ok=True)
-    for i in range(4):
+    for i in range(6):
         dfML_result[i].to_csv(f'./ml/results_{MODE}/result_s{i}.csv')
         roc_plot[i].savefig(f'./ml/results_{MODE}/roc_plot_s{i}.pdf')
         cm_plot[i].savefig(f'./ml/results_{MODE}/cm_plot_s{i}.pdf')

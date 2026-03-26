@@ -50,7 +50,8 @@ class Classification_ML():
                         min_child_weight=1,
                         objective='multi:softmax',
                         num_class=3,
-                        seed=27)
+                        seed=27,
+                        )
     xgb.fit(training_data['X_train'], training_data['Y_train'].reshape(training_data['Y_train'].shape[0],))
     predicted_labels = xgb.predict(training_data['X_test'])
 
@@ -296,14 +297,18 @@ class Classification_ML():
     # 특성에 따른 ML 성능
     def get_sets(data):
         s1 = data.filter(regex=r'^(x|y)\d+_(diff_mean|std)$')  # 랜드마크 통계
-        s2 = data[['pitch_diff_mean','pitch_std','yaw_diff_mean','yaw_std','roll_diff_mean','roll_std']] # head pose
-        s3 = data[['gaze_diff_mean','gaze_std','blink_diff_mean']]
+        s2 = data.filter(regex=r'(pitch|yaw|roll)') # head pose
+        s3 = data.filter(regex=r'(gaze|ear)')
         s4 = pd.concat([s1,s2,s3], axis=1) # 전체 통합
-        return s1.values, s2.values, s3.values, s4.values
+        s5 = pd.concat([s1,s2], axis=1) # lm + head pose
+        s6 = pd.concat([s1,s3], axis=1) # lm + gaze/ear
+        return s1.values, s2.values, s3.values, s4.values, s5.values, s6.values
     
-    X_s1_train, X_s2_train, X_s3_train, X_s4_train = get_sets(train_df)
+    # X_s1_train, X_s2_train, X_s3_train, X_s4_train = get_sets(train_df)
+    X_s1_train, X_s2_train, X_s3_train, X_s4_train, X_s5_train, X_s6_train = get_sets(train_df)
     # X_s1_val, X_s2_val, X_s3_val, X_s4_val = get_sets(val_df)
-    X_s1_test, X_s2_test, X_s3_test, X_s4_test = get_sets(test_df)
+    # X_s1_test, X_s2_test, X_s3_test, X_s4_test = get_sets(test_df)
+    X_s1_test, X_s2_test, X_s3_test, X_s4_test, X_s5_test, X_s6_test = get_sets(test_df)
 
     Y_train = train_df[['Label']].values
     # Y_val = val_df[['Label']].values
@@ -322,6 +327,8 @@ class Classification_ML():
         (X_s2_train, X_s2_test),
         (X_s3_train, X_s3_test),
         (X_s4_train, X_s4_test),
+        (X_s5_train, X_s5_test),
+        (X_s6_train, X_s6_test),
     ]:
         training_data.append({
             'X_train': X_train, 'Y_train': Y_train,
