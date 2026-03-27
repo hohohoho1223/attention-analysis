@@ -37,6 +37,7 @@ class DummyLayer(Layer):
     def call(self, inputs, **kwargs):
         return inputs
 
+
 custom_objects = {
     'TFOpLambda': DummyLayer,
     'RandomFlip': DummyLayer,
@@ -45,7 +46,7 @@ custom_objects = {
     'RandomBrightness': DummyLayer,
     'RandomTranslation': DummyLayer,
     'RandomContrast': DummyLayer,
-    'Rescaling': DummyLayer
+    'Rescaling': DummyLayer,
     # 🚨 DepthwiseConv2D 수술 코드는 삭제했습니다! 구버전 엔진이 완벽하게 알아서 읽을 겁니다.
 }
 
