@@ -17,7 +17,7 @@
       box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px;
     }
     .logo-text {
-      color: #FF7710; 
+      color: #FF7710; /* 멋쟁이사자처럼 시그니처 오렌지 */
       font-size: 28px; font-weight: bold; margin-bottom: 10px;
     }
     .sub-text {
@@ -47,7 +47,7 @@
   <script src="/js/firebase-config.js"></script>
   
   <script>
-    // 🌟 로그인 및 관리자/학생 권한 분기 로직 (오지랖 alert 제거 완료!)
+    // 🌟 로그인 및 관리자/학생 권한 분기 로직
     document.getElementById('googleLoginBtn').addEventListener('click', () => {
       auth.signInWithPopup(googleProvider)
         .then((result) => {
@@ -55,14 +55,14 @@
           console.log("로그인 성공:", user.email);
           
           // 🚨 관리자 이메일을 여기에 하드코딩해둡니다 (추후 DB 연동 가능)
-          const adminEmails = ['nornin9014@gmail.com','slee9219@gmail.com', 'admin@mutsa.com']; 
+          const adminEmails = ['slee9219@gmail.com', 'admin@mutsa.com', 'wonho1820@gmail.com']; 
           
           if (adminEmails.includes(user.email)) {
-            // 알림창 없이 조용히 관리자 페이지로 이동
-            window.location.href = '/admin_dashboard.html'; 
+            alert(`관리자 ${user.displayName}님 환영합니다.`);
+            window.location.href = '/admin_dashboard.html'; // 관리자 페이지로 이동 (나중에 만들 예정)
           } else {
-            // 알림창 없이 조용히 학생 페이지로 이동
-            window.location.href = '/student_dashboard.html'; 
+            alert(`학생 ${user.displayName}님 환영합니다.`);
+            window.location.href = '/student_dashboard.html'; // 아까 이름 바꾼 달력 페이지로 이동!
           }
         })
         .catch((error) => {
@@ -72,4 +72,4 @@
     });
   </script>
 </body>
-</html> 
+</html>
