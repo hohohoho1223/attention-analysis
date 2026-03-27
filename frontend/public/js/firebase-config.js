@@ -7,16 +7,15 @@
 // 3. 프로젝트 설정 > 일반 탭 > "Firebase SDK 스니펫" > "구성" 선택
 // 4. 아래 값들을 복사해서 교체
 //
-//================
 const firebaseConfig = {
-  apiKey: "AIzaSyCuQRB-5cEeCnZhVmpnpv7c19ZbwZfWVWo",
-  authDomain: "cv-focus-system-a4f71.firebaseapp.com",
-  projectId: "cv-focus-system-a4f71",
-  storageBucket: "cv-focus-system-a4f71.firebasestorage.app",
-  messagingSenderId: "641956967338",
-  appId: "1:641956967338:web:fa643d850bcd1914d7f1d3"
+  apiKey: "AIzaSyCGJ9PzArXNTZx-1uqpJp6AaZLXXo9Cpjw",
+  authDomain: "cv-focus-system.firebaseapp.com",
+  projectId: "cv-focus-system",
+  storageBucket: "cv-focus-system.firebasestorage.app",
+  messagingSenderId: "635999713897",
+  appId: "1:635999713897:web:e4af6ae707a1174439c0f8",
+  measurementId: "G-ZE8BC4E9X8"
 };
-//================
 
 // Firebase 초기화 (Firestore용 CDN 방식)
 let db;

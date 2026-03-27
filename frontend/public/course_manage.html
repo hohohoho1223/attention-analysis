@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>과정 관리 - 멋쟁이사자처럼</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
+  <style>
+    /* 🎨 멋사 시그니처 & 관리자 공통 테마 */
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; }
+    header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+    .logo-area { display: flex; align-items: center; gap: 15px; }
+    .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
+    .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
+    
+    .container { display: flex; height: calc(100vh - 65px); }
+    
+    /* 🌟 왼쪽 사이드바 (피그마 메뉴 연동) */
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; }
+    .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
+    .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
+    .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
+
+    /* 🌟 메인 컨텐츠 영역 (2단 분리 레이아웃) */
+    .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; display: flex; gap: 30px; }
+    
+    /* 왼쪽: 과정 목록 패널 */
+    .course-panel { width: 250px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); height: fit-content; }
+    .panel-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #FF7710; display: flex; justify-content: space-between; align-items: center; }
+    .course-item { padding: 12px 15px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 6px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; font-size: 14px; font-weight: bold; color: #555; }
+    .course-item:hover { border-color: #FF7710; color: #FF7710; }
+    .course-item.active { background-color: #FF7710; color: white; border-color: #FF7710; box-shadow: 0 2px 8px rgba(255,119,16,0.3); }
+
+    /* 오른쪽: 학생 관리 테이블 패널 */
+    .student-panel { flex-grow: 1; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .top-controls { display: flex; justify-content: flex-end; margin-bottom: 15px; gap: 10px; }
+    .action-btn { padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 13px; }
+    .btn-edit { background-color: #f1f3f5; color: #555; border: 1px solid #ddd; }
+    .btn-edit:hover { background-color: #e2e6ea; }
+    .btn-save { background-color: #FF7710; color: white; border: none; }
+    .btn-save:hover { background-color: #e66a00; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead { background-color: #fcfcfc; border-top: 1px solid #ddd; border-bottom: 2px solid #eee; }
+    th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; font-size: 14px; }
+    th { color: #777; }
+    tbody tr:hover { background-color: #fffaf0; }
+    .role-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; background-color: #e9ecef; color: #495057; }
+    .role-badge.student { background-color: #e0f3ff; color: #007bff; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-area">
+      <div class="logo-text">멋쟁이사자처럼</div>
+      <div class="admin-badge">Admin</div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="sidebar">
+      <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
+      <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
+      <a href="#" class="menu-item active">과정 관리</a>
+    </div>
+
+    <div class="main-content">
+      
+      <div class="course-panel">
+        <div class="panel-title">과정 목록</div>
+        <div class="course-item active" onclick="selectCourse(this, 'AI NL 5기')">AI NL 5기</div>
+        <div class="course-item" onclick="selectCourse(this, 'AI CV 4기')">AI CV 4기</div>
+        <div class="course-item" onclick="selectCourse(this, '백엔드 3기')">백엔드 3기</div>
+        <div class="course-item" onclick="selectCourse(this, '프론트엔드 3기')">프론트엔드 3기</div>
+      </div>
+
+      <div class="student-panel">
+        <div class="panel-title">
+          <span id="currentCourseTitle">AI NL 5기 - 학생 관리</span>
+          <div class="top-controls">
+            <button class="action-btn btn-edit">수정</button>
+            <button class="action-btn btn-save">저장</button>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>번호</th>
+              <th>이름</th>
+              <th>권한</th>
+              <th>이메일</th>
+            </tr>
+          </thead>
+          <tbody id="student-list-body">
+            </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script>
+    const tbody = document.getElementById('student-list-body');
+    const courseTitle = document.getElementById('currentCourseTitle');
+
+    // 🌟 PM의 센스! 빈 화면을 보여주지 않기 위한 '가짜(Mock) 학생 데이터'
+    // 나중에 파이어베이스 Authentication(회원가입 기능)을 붙이면 이걸 진짜 DB 호출로 바꾸면 됩니다.
+    const mockStudents = {
+        'AI NL 5기': [
+            { name: '이건우', role: 'Student', email: 'geonwu@likelion.org' },
+            { name: '김멋사', role: 'Student', email: 'mutsa_kim@gmail.com' },
+            { name: '송무식', role: 'Student', email: 'musik@likelion.org' },
+            { name: '박해커', role: 'Student', email: 'hacker_p@gmail.com' }
+        ],
+        'AI CV 4기': [
+            { name: '최비전', role: 'Student', email: 'cv_choi@gmail.com' },
+            { name: '정영상', role: 'Student', email: 'image_jung@naver.com' }
+        ],
+        '백엔드 3기': [
+            { name: '서버왕', role: 'Student', email: 'server_king@gmail.com' }
+        ],
+        '프론트엔드 3기': []
+    };
+
+    // 과정 클릭 시 UI 변경 및 데이터 로드 함수
+    function selectCourse(element, courseName) {
+        // 1. 활성화(주황색) UI 이동
+        document.querySelectorAll('.course-item').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+
+        // 2. 타이틀 변경
+        courseTitle.textContent = `${courseName} - 학생 관리`;
+
+        // 3. 학생 목록 테이블 렌더링
+        renderStudentTable(courseName);
+    }
+
+    // 학생 테이블 그리기
+    function renderStudentTable(courseName) {
+        tbody.innerHTML = ''; // 테이블 초기화
+        const students = mockStudents[courseName] || [];
+
+        if (students.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="padding: 40px; color: #aaa;">등록된 학생이 없습니다.</td></tr>';
+            return;
+        }
+
+        students.forEach((student, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${index + 1}</td>
+                <td style="font-weight: bold; color: #333;">${student.name}</td>
+                <td><span class="role-badge student">${student.role}</span></td>
+                <td style="color: #666;">${student.email}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // 페이지 로드 시 'AI NL 5기' 기본 렌더링
+    renderStudentTable('AI NL 5기');
+
+  </script>
+</body>
+</html>

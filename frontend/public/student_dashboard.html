@@ -18,12 +18,14 @@
     header { width: 100%; padding: 20px; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 40px; }
     .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
     .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
+    
     #input-section { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px; z-index: 10; position: relative;}
     .input-group { margin-bottom: 20px; text-align: left; }
     .input-group label { display: block; font-size: 13px; color: #555; margin-bottom: 8px; }
     .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
     .submit-btn { width: 100%; padding: 12px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
     .submit-btn:hover { background-color: #e66a00; }
+    
     #webcam-section { display: none; width: 80%; max-width: 800px; text-align: center; }
     .welcome-msg { font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #333; display: flex; justify-content: center; align-items: center; gap: 15px; }
     .video-container { position: relative; width: 100%; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
@@ -31,7 +33,11 @@
     canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; }
     .waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; z-index: 10; transition: opacity 0.5s ease; }
     .exit-btn { background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; font-weight: bold; }
-    .exit-btn:hover { background-color: #c82333; }
+    
+    /* 🌟 피그마 설계도: 수업 종료 화면 */
+    #end-section { display: none; width: 100%; height: 50vh; justify-content: center; align-items: center; flex-direction: column; }
+    .end-msg { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 20px; }
+    .end-sub { color: #666; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -68,6 +74,11 @@
     </div>
   </div>
 
+  <div id="end-section">
+    <div class="end-msg">수업이 종료되었습니다.</div>
+    <div class="end-sub">오늘 하루도 고생 많으셨습니다! 창을 닫아주세요.</div>
+  </div>
+
   <script src="/js/firebase-config.js"></script>
   <script src="/js/ai_logic.js"></script> 
   
@@ -76,6 +87,7 @@
     const exitBtn = document.getElementById('exitBtn');
     const inputSection = document.getElementById('input-section');
     const webcamSection = document.getElementById('webcam-section');
+    const endSection = document.getElementById('end-section');
     const displayName = document.getElementById('display-name');
     const videoElement = document.getElementById('webcam');
     const canvasElement = document.getElementById('output_canvas');
@@ -87,59 +99,92 @@
     let aiInterval = null; 
     let lastAnalyzeTime = Date.now(); 
 
+    let isCnnProcessing = false; 
+    let cnnProbBuffer = [];      
+    let isDrowsy = false;        
+    let sessionScores = []; // 🌟 일별 평균을 위한 배열
+
+    function getCropBase64(video, landmarks, indices, pad, width, height) {
+        let xs = indices.map(i => landmarks[i].x * width);
+        let ys = indices.map(i => landmarks[i].y * height);
+        let xMin = Math.max(0, Math.min(...xs) - pad);
+        let xMax = Math.min(width, Math.max(...xs) + pad);
+        let yMin = Math.max(0, Math.min(...ys) - pad);
+        let yMax = Math.min(height, Math.max(...ys) + pad);
+        let cropW = xMax - xMin;
+        let cropH = yMax - yMin;
+        if (cropW <= 0 || cropH <= 0) return null;
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = 224; offCanvas.height = 224;
+        const ctx = offCanvas.getContext('2d');
+        ctx.drawImage(video, xMin, yMin, cropW, cropH, 0, 0, 224, 224);
+        return offCanvas.toDataURL('image/jpeg', 0.8); 
+    }
+
     const headPoseEstimator = new HeadPoseEstimator();
     const eyeFocusAnalyzer = new EyeFocusAnalyzer();
     const attentionAnalyzer = new AttentionAnalyzer();
 
-    const faceMesh = new FaceMesh({locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-    }});
-    faceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
+    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
     faceMesh.onResults((results) => {
-      canvasElement.width = videoElement.videoWidth;
-      canvasElement.height = videoElement.videoHeight;
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      
-      const currentTime = Date.now();
-      const dt = (currentTime - lastAnalyzeTime) / 1000.0; 
-      lastAnalyzeTime = currentTime;
+      canvasElement.width = videoElement.videoWidth; canvasElement.height = videoElement.videoHeight;
+      canvasCtx.save(); canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      const dt = (Date.now() - lastAnalyzeTime) / 1000.0; lastAnalyzeTime = Date.now();
 
-      let faceDetected = false;
-      let poseAngles = new PoseAngles();
-      let eyeResult = new EyeFocusResult();
+      let faceDetected = false; let poseAngles = new PoseAngles(); let eyeResult = new EyeFocusResult();
 
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         faceDetected = true;
         const landmarks = results.multiFaceLandmarks[0];
-
         drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
-
         poseAngles = headPoseEstimator.estimate(landmarks);
         eyeResult = eyeFocusAnalyzer.analyze(landmarks);
+
+        if (!isCnnProcessing && isClassStarted) { 
+            const LEFT_EYE = [362, 385, 387, 263, 373, 380];
+            const RIGHT_EYE = [33, 160, 158, 133, 153, 144];
+            const MOUTH_INDICES = [61, 291, 39, 181, 0, 17, 269, 405];
+            let w = videoElement.videoWidth; let h = videoElement.videoHeight;
+            let leftB64 = getCropBase64(videoElement, landmarks, LEFT_EYE, 15, w, h);
+            let rightB64 = getCropBase64(videoElement, landmarks, RIGHT_EYE, 15, w, h);
+            let mouthB64 = getCropBase64(videoElement, landmarks, MOUTH_INDICES, 60, w, h);
+
+            if (leftB64 && rightB64 && mouthB64) {
+                isCnnProcessing = true; 
+                fetch('http://127.0.0.1:8000/predict', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ left_eye: leftB64, right_eye: rightB64, mouth: mouthB64 })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    const maxProb = data.prob;
+                    cnnProbBuffer.push(maxProb);
+                    if(cnnProbBuffer.length > 8) cnnProbBuffer.shift(); 
+                    const smoothProb = cnnProbBuffer.reduce((a, b) => a + b) / cnnProbBuffer.length;
+                    console.log(`[FastAPI] 현재 확률: ${(maxProb*100).toFixed(1)}% | 8프레임 평균: ${(smoothProb*100).toFixed(1)}%`);
+                    
+                    // 🌟 설계도 기준 0.7
+                    isDrowsy = smoothProb > 0.7; 
+                    isCnnProcessing = false; 
+                }).catch(err => { isCnnProcessing = false; });
+            }
+        }
       }
 
-      // 🌟 수학적 고개/눈동자 추적 로직만 가동 (CNN 제외)
-      const attentionState = attentionAnalyzer.update(poseAngles, 0.0, faceDetected, dt, eyeResult, false);
+      const attentionState = attentionAnalyzer.update(poseAngles, 0.0, faceDetected, dt, eyeResult, isDrowsy);
+      if (isClassStarted && !isNaN(attentionState.score)) { sessionScores.push(attentionState.score); }
 
       if (myDocRef && isClassStarted) {
-        let statusKorean = "대기중";
-        if (attentionState.state === "FOCUSED") statusKorean = "집중";
-        else if (attentionState.state === "PARTIAL_FOCUS") statusKorean = "집중 저하";
-        else if (attentionState.state === "LOST_FOCUS") statusKorean = "이탈/졸음";
-        else if (attentionState.state === "ABSENT") statusKorean = "자리이탈";
+        let statusKOR = "대기중";
+        if (attentionState.state === "FOCUSED") statusKOR = "집중";
+        else if (attentionState.state === "PARTIAL_FOCUS") statusKOR = "집중 저하";
+        else if (attentionState.state === "LOST_FOCUS") statusKOR = "이탈";
+        else if (attentionState.state === "ABSENT") statusKOR = "자리비움";
+        else if (attentionState.state === "DROWSY") statusKOR = "🚨 졸음 🚨"; 
 
-        myDocRef.update({ 
-          status: statusKorean, 
-          score: Math.round(attentionState.score) + '%', 
-          lastActive: Date.now() 
-        });
+        myDocRef.update({ status: statusKOR, score: Math.round(attentionState.score) + '%', lastActive: Date.now() });
       }
       canvasCtx.restore();
     });
@@ -147,46 +192,33 @@
     submitBtn.addEventListener('click', async () => {
       const name = document.getElementById('studentName').value;
       if (!name) { alert('이름을 입력해주세요!'); return; }
-
       displayName.textContent = name;
-      inputSection.style.display = 'none';
-      webcamSection.style.display = 'block';
+      inputSection.style.display = 'none'; webcamSection.style.display = 'block';
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         videoElement.srcObject = stream;
-      } catch (err) {
-        alert("웹캠 권한을 허용해야 합니다!");
-        return; 
-      }
+      } catch (err) { alert("웹캠 권한 허용 필수!"); return; }
 
-      const course = document.getElementById('courseName').value;
       myDocRef = db.collection('active_students').doc(name);
-      await myDocRef.set({ name: name, course: course, status: '대기중', score: '-', warnings: 0, timestamp: firebase.firestore.FieldValue.serverTimestamp(), lastActive: Date.now() });
+      await myDocRef.set({ name: name, course: document.getElementById('courseName').value, status: '대기중', score: '-', warnings: 0, lastActive: Date.now() });
 
-      let isProcessingFace = false;
+      let isFaceProcessing = false;
       aiInterval = setInterval(async () => {
-        if (videoElement.readyState >= 2 && isClassStarted && !isProcessingFace) {
-          isProcessingFace = true;
-          try { await faceMesh.send({image: videoElement}); } catch(e){}
-          isProcessingFace = false;
+        if (videoElement.readyState >= 2 && isClassStarted && !isFaceProcessing) {
+          isFaceProcessing = true; try { await faceMesh.send({image: videoElement}); } catch(e){} isFaceProcessing = false;
         }
       }, 500); 
 
-      setInterval(() => {
-        if (myDocRef) myDocRef.update({ lastActive: Date.now() }).catch(e=>{});
-      }, 5000);
+      setInterval(() => { if (myDocRef) myDocRef.update({ lastActive: Date.now() }).catch(e=>{}); }, 5000);
 
       db.collection('settings').doc('class_status').onSnapshot((doc) => {
         if (doc.exists) {
           isClassStarted = doc.data().is_class_started;
           if (isClassStarted) {
-            waitingOverlay.style.opacity = '0';
-            setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
+            waitingOverlay.style.opacity = '0'; setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
           } else {
-            waitingOverlay.style.display = 'flex';
-            setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
-            if (canvasCtx) canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            waitingOverlay.style.display = 'flex'; setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
             if (myDocRef) myDocRef.update({ status: '대기중', score: '-', lastActive: Date.now() });
           }
         }
@@ -194,16 +226,45 @@
     });
 
     exitBtn.addEventListener('click', async () => {
-      if (confirm("수업에서 완벽하게 나가시겠습니까?")) {
+      if (confirm("수업을 종료하시겠습니까? (데이터가 저장됩니다)")) {
+        let finalAverageScore = 0;
+        let timelineData = []; // 🌟 진짜 타임라인 배열!
+
+        if (sessionScores.length > 0) {
+            // 1. 전체 평균 점수
+            finalAverageScore = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+            
+            // 2. 타임라인용 데이터 압축 (수백 개를 20개 구간으로 묶어서 평균 냄)
+            const bucketSize = Math.max(1, Math.ceil(sessionScores.length / 20));
+            for(let i=0; i<sessionScores.length; i+=bucketSize) {
+                const chunk = sessionScores.slice(i, i+bucketSize);
+                const avg = Math.round(chunk.reduce((a,b)=>a+b,0)/chunk.length);
+                timelineData.push(avg);
+            }
+        }
+        
+        const today = new Date();
+        const dateString = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+        
+        if (typeof db !== 'undefined' && finalAverageScore > 0) {
+            // 🌟 기존 firebaseUtils 대신 직접 DB에 평균 점수 + 타임라인 배열 동시 저장!
+            const docId = dateString.replace(/-/g, ''); // 예: 20260326
+            await db.collection('helmo').doc('results').collection('daily').doc(docId).set({
+                result: finalAverageScore,
+                timeline: timelineData  // 찐 데이터 탑재 완로!
+            }, { merge: true });
+        }
+
         if (aiInterval) clearInterval(aiInterval);
         if (myDocRef) await myDocRef.delete();
-        window.location.href = '/'; 
+        
+        if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
+        webcamSection.style.display = 'none';
+        endSection.style.display = 'flex';
       }
     });
 
-    window.addEventListener('unload', () => {
-      if (myDocRef) myDocRef.delete(); 
-    });
+    window.addEventListener('unload', () => { if (myDocRef) myDocRef.delete(); });
   </script>
 </body>
 </html>

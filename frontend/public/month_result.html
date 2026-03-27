@@ -1,429 +1,262 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Helmo 월별 안전 관리 분석</title>
-    <!-- 기본 스타일 (Tailwind CSS 대신) -->
-    <style>
-        /* 기본 리셋 및 Tailwind 스타일 대체 */
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background-color: #f9fafb; padding: 1rem; }
-        .bg-white { background-color: white; }
-        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-        .rounded-xl { border-radius: 0.75rem; }
-        .p-6 { padding: 1.5rem; }
-        .p-10 { padding: 2.5rem; }
-        .mx-auto { margin-left: auto; margin-right: auto; }
-        .my-8 { margin-top: 2rem; margin-bottom: 2rem; }
-        .max-w-4xl { max-width: 56rem; }
-        .w-full { width: 100%; }
-        .relative { position: relative; }
-        .absolute { position: absolute; }
-        .top-4 { top: 1rem; }
-        .left-4 { left: 1rem; }
-        .top-8 { top: 2rem; }
-        .left-8 { left: 2rem; }
-        .bg-gray-200 { background-color: #e5e7eb; }
-        .hover\\:bg-gray-300:hover { background-color: #d1d5db; }
-        .rounded-lg { border-radius: 0.5rem; }
-        .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .z-10 { z-index: 10; }
-        .transition { transition-property: all; }
-        .duration-150 { transition-duration: 150ms; }
-        .px-4 { padding-left: 1rem; padding-right: 1rem; }
-        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-        .text-gray-700 { color: #374151; }
-        .font-semibold { font-weight: 600; }
-        .flex { display: flex; }
-        .flex-col { flex-direction: column; }
-        .items-center { align-items: center; }
-        .justify-center { justify-content: center; }
-        .gap-4 { gap: 1rem; }
-        .gap-6 { gap: 1.5rem; }
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .mb-8 { margin-bottom: 2rem; }
-        .mb-10 { margin-bottom: 2.5rem; }
-        .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
-        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
-        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-        .font-extrabold { font-weight: 800; }
-        .font-bold { font-weight: 700; }
-        .text-gray-900 { color: #111827; }
-        .text-gray-600 { color: #4b5563; }
-        .text-gray-800 { color: #1f2937; }
-        .w-32 { width: 8rem; }
-        .text-center { text-align: center; }
-        .bg-blue-600 { background-color: #2563eb; }
-        .hover\\:bg-blue-700:hover { background-color: #1d4ed8; }
-        .text-white { color: white; }
-        .disabled\\:bg-gray-300:disabled { background-color: #d1d5db; }
-        .disabled\\:cursor-not-allowed:disabled { cursor: not-allowed; }
-        .h-5 { height: 1.25rem; }
-        .w-5 { width: 1.25rem; }
-        .h-12 { height: 3rem; }
-        .w-12 { width: 3rem; }
-        .bg-blue-500 { background-color: #3b82f6; }
-        button { cursor: pointer; border: none; }
-        button:disabled { opacity: 0.6; }
-    </style>
-    <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        /* Custom font import for better Korean display */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        /* Chart container styling for responsiveness */
-        .chart-container {
-            position: relative;
-            height: 40vh; /* Responsive height */
-            width: 90vw; /* Responsive width */
-            max-width: 800px;
-            margin: 0 auto;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>월간 결과 조회 - 멋쟁이사자처럼</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* 🎨 멋쟁이사자처럼 테마 스타일 (Figma 디자인 반영) */
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; color: #333; }
+    header { width: 100%; padding: 20px 0; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
+    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
+    .back-btn { background-color: #f1f3f5; color: #555; border: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; cursor: pointer; position: absolute; left: 20px; top: 25px; text-decoration: none; font-weight: bold; }
+    .back-btn:hover { background-color: #e9ecef; }
+    .main-container { width: 90%; max-width: 1000px; margin: 40px 0; display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
+    @media (max-width: 768px) { .main-container { grid-template-columns: 1fr; } }
+    .calendar-card, .summary-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; color: #FF7710; font-weight: bold; }
+    .month-nav-btn { background: none; border: 1px solid #FF7710; color: #FF7710; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .month-nav-btn:hover { background-color: #FF7710; color: white; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; text-align: center; }
+    .day-name { font-weight: bold; color: #777; font-size: 14px; margin-bottom: 5px; }
+    .calendar-grid div.sat { color: #007bff; }
+    .calendar-grid div.sun { color: #dc3545; }
+    .calendar-day { aspect-ratio: 1; border: 1px solid #eee; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-around; padding: 5px; cursor: pointer; transition: transform 0.2s; position: relative; }
+    .calendar-day:hover { transform: translateY(-2px); box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-color: #FF7710; }
+    .calendar-day .day-num { font-size: 14px; color: #555; }
+    .calendar-day .day-grade { font-size: 18px; font-weight: bold; color: #aaa; }
+    .day-grade.A { color: #28a745; }
+    .day-grade.B { color: #88c94e; }
+    .day-grade.C { color: #ffc107; }
+    .day-grade.D { color: #fd7e14; }
+    .day-grade.F { color: #dc3545; }
+    .day-grade.empty { visibility: hidden; }
+    .day-grade.loading { color: #eee; }
+    .day-grade.empty::after { content: '-'; }
+    .not-current-month { color: #ccc !important; border-color: transparent !important; pointer-events: none; }
+    .not-current-month * { color: #ccc !important; }
+    .calendar-grid div.empty-day { border: none !important; pointer-events: none; }
+    .calendar-day:active { background-color: #fffaf0; }
+    .summary-card { display: flex; flex-direction: column; justify-content: flex-start; }
+    .summary-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 30px; border-bottom: 2px solid #FF7710; padding-bottom: 10px; }
+    .summary-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background-color: #fcfcfc; border-radius: 8px; border: 1px solid #eee; }
+    .summary-label { font-size: 14px; color: #666; }
+    .summary-value { font-size: 20px; font-weight: bold; color: #333; }
+    .summary-value.grade { font-size: 24px; color: #FF7710; }
+    .summary-value.rate { color: #FF7710; }
+    .summary-grade { display: flex; align-items: baseline; gap: 5px; }
+    .summary-grade-label { font-size: 12px; color: #aaa; margin-left: 20px;}
+    .calendar-day .day-point { position: absolute; bottom: 2px; width: 4px; height: 4px; background-color: #FF7710; border-radius: 50%; left: calc(50% - 2px); visibility: hidden; }
+    .day-point.has-data { visibility: visible; }
+  </style>
 </head>
-<body class="bg-gray-50 p-4">
-    <!-- 메인 컨테이너에 relative 클래스 추가 -->
-    <div class="relative w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 mx-auto my-8">
-        
-        <!-- 메인 페이지로 이동 버튼 -->
-        <button onclick="goToCalendarPage()" class="absolute top-4 left-4 bg-gray-200 hover:bg-gray-300 rounded-lg shadow-md z-10 transition duration-150 md:top-8 md:left-8 px-4 py-2 text-gray-700 font-semibold">
-            <span>← 메인 화면</span>
-        </button>
+<body>
+  <header>
+    <a href="/admin_dashboard.html" class="back-btn">< 수업 모니터링</a>
+    <div class="logo-text">멋쟁이사자처럼</div>
+    <div class="sub-text">AI NL 5기 과정 - 월간 결과 조회</div>
+  </header>
 
-        <!-- Header -->
-        <div class="flex flex-col items-center">
-            <img src="https://placehold.co/50x50/007bff/ffffff?text=AI" alt="AI Icon" class="h-12 w-12 mb-4 rounded-full bg-blue-500 p-2">
-            <div class="text-3xl font-extrabold text-gray-900 mb-2">Helmo 안전 관리</div>
-            <div class="text-lg text-gray-600 mb-8">이미지 기반 안전모 착용 현황 분석</div>
-        </div>
-
-        <!-- Month Navigation -->
-        <div class="flex items-center justify-center gap-4 mb-10">
-            <button id="prevBtn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition duration-150 disabled:bg-gray-300 disabled:cursor-not-allowed" onclick="prevMonth()">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-            </button>
-            <span id="monthLabel" class="text-xl font-bold text-gray-800 w-32 text-center">2024년 1월</span>
-            <button id="nextBtn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition duration-150 disabled:bg-gray-300 disabled:cursor-not-allowed" onclick="nextMonth()">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
-            </button>
-        </div>
-
-        <!-- Key Metric Cards -->
-        <div class="flex flex-wrap justify-center gap-6 mb-12">
-            
-            <div class="flex flex-col items-center bg-blue-50 border border-blue-200 rounded-xl shadow-lg p-5 w-40 md:w-48 transition hover:shadow-xl">
-                <h3 class="text-sm font-medium text-blue-600 mb-1">월간 평균 착용률</h3>
-                <p id="rate" class="text-3xl font-extrabold text-blue-800">-</p>
-            </div>
-            
-            <div class="flex flex-col items-center bg-white border border-gray-200 rounded-xl shadow-lg p-5 w-40 md:w-48 transition hover:shadow-xl">
-                <h3 class="text-sm font-medium text-gray-500 mb-1">총 감지 인원</h3>
-                <p id="detected" class="text-3xl font-extrabold text-gray-900">-</p>
-            </div>
-            
-            <div class="flex flex-col items-center bg-white border border-gray-200 rounded-xl shadow-lg p-5 w-40 md:w-48 transition hover:shadow-xl">
-                <h3 class="text-sm font-medium text-gray-500 mb-1">안전모 착용 인원</h3>
-                <p id="wearing" class="text-3xl font-extrabold text-gray-900">-</p>
-            </div>
-            
-            <div id="gradeCard" class="flex flex-col items-center bg-green-50 border border-green-300 rounded-xl shadow-lg p-5 w-40 md:w-48 transition hover:shadow-xl">
-                <h3 class="text-sm font-medium text-green-700 mb-1">안전 관리 등급</h3>
-                <p id="grade" class="text-3xl font-extrabold text-green-800">-</p>
-            </div>
-        </div>
-
-        <!-- Chart -->
-        <h3 class="text-xl font-bold text-gray-800 mb-4 text-left border-b pb-2">주간 안전모 착용률 추이</h3>
-        <div class="chart-container bg-gray-50 p-4 rounded-xl shadow-inner">
-            <canvas id="helmetChart"></canvas>
+  <div class="main-container">
+    <div class="calendar-card">
+      <div class="calendar-header">
+        <button class="month-nav-btn" id="prevMonth">< 이전 달</button>
+        <span id="currentMonthTitle">2026년 3월</span>
+        <button class="month-nav-btn" id="nextMonth">다음 달 ></button>
+      </div>
+      
+      <div class="calendar-grid">
+        <div class="day-name sun">일</div> <div class="day-name">월</div> <div class="day-name">화</div> <div class="day-name">수</div> <div class="day-name">목</div> <div class="day-name">금</div> <div class="day-name sat">토</div>
+      </div>
+      <div class="calendar-grid" id="calendarBody">
         </div>
     </div>
 
-    <script>
-        // 전역 변수 설정
-        let currentYear;
-        let currentMonth;
-        let helmetChart;
-        let isLoading = false; // 로딩 상태 변수 추가
+    <div class="summary-card">
+      <div class="summary-title">📈 결과 요약</div>
+      
+      <div class="summary-item">
+        <div class="summary-label">이번 주 평균 점수</div>
+        <div class="summary-value rate" id="weeklyScore">- %</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">이번 주 등급</div>
+        <div class="summary-grade">
+            <div class="summary-value grade" id="weeklyGrade">-</div>
+        </div>
+      </div>
 
-        // --- 네비게이션 함수 ---
-        /**
-         * 메인 캘린더/기록 페이지로 이동합니다.
-         */
-        function goToCalendarPage() {
-            // index.html로 페이지를 실제로 이동합니다.
-            window.location.href = 'index.html';
+      <div class="summary-item" style="margin-top: 20px;">
+        <div class="summary-label">이번 달 평균 점수</div>
+        <div class="summary-value rate" id="monthlyScore">- %</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">이번 달 등급</div>
+        <div class="summary-grade">
+            <div class="summary-value grade" id="monthlyGrade">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  
+  <script>
+    // 🌟 1. 현재 날짜 설정 (건우님이 테스트하신 2026년 3월 26일 기준으로 고정해서 먼저 보여줍니다!)
+    let currentDate = new Date(2026, 2, 26); // 연, 월(0=1월), 일
+
+    const calendarBody = document.getElementById('calendarBody');
+    const currentMonthTitle = document.getElementById('currentMonthTitle');
+    const prevMonthBtn = document.getElementById('prevMonth');
+    const nextMonthBtn = document.getElementById('nextMonth');
+
+    // 🌟 2. 달력 그리기 & 파이어베이스 데이터 연동 마법
+    async function renderCalendar() {
+      if (typeof firebaseUtils === 'undefined') {
+          alert('❌ firebase-config.js를 불러오지 못했습니다. 파일 위치를 확인해주세요!');
+          return;
+      }
+
+      calendarBody.innerHTML = ''; // 기존 달력 청소
+      
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      
+      currentMonthTitle.textContent = `${year}년 ${month + 1}월`;
+
+      const firstDay = new Date(year, month, 1).getDay(); // 이번 달 1일이 무슨 요일?(0~6)
+      const daysInMonth = new Date(year, month + 1, 0).getDate(); // 이번 달 며칠까지 있어?
+      
+      // 🌟 데이터베이스에서 이번 달 하루치 데이터 싹 긁어오기! (엄청난 기능 🚀)
+      let dailyDataList = {};
+      try {
+          const docRef = db.collection('helmo').doc('results').collection('daily');
+          
+          // YYYYMM 형식 (예: 202603)
+          const monthKey = `${year}${(month + 1).toString().padStart(2, '0')}`;
+          console.log(`📡 파이어베이스에서 ${monthKey} 데이터를 긁어오는 중...`);
+
+          // 효율적으로 '이번 달' 데이터만 싹 긁어옴
+          const querySnapshot = await docRef
+              .where(firebase.firestore.FieldPath.documentId(), '>=', `${monthKey}01`)
+              .where(firebase.firestore.FieldPath.documentId(), '<=', `${monthKey}${daysInMonth}`)
+              .get();
+          
+          querySnapshot.forEach(doc => {
+              // doc.id는 YYYYMMDD 형식. 날짜 숫자(DD)만 따서 저장.
+              const dayKey = parseInt(doc.id.substring(6));
+              dailyDataList[dayKey] = doc.data().result;
+          });
+          
+          // 🚀 어제 저장한 26일 데이터 팩트체크!
+          if (year === 2026 && month === 2 && dailyDataList[26]) {
+              console.log(`✅ 대박! 어제 저장한 26일 100점 데이터를 성공적으로 읽어왔습니다!`);
+          }
+
+      } catch (error) {
+          console.error("데이터 로딩 중 에러:", error);
+      }
+
+      // 달력 칸 그리기
+      // 1. 1일 전까지 빈칸
+      for (let i = 0; i < firstDay; i++) {
+        const emptyDay = document.createElement('div');
+        emptyDay.classList.add('empty-day');
+        calendarBody.appendChild(emptyDay);
+      }
+
+      // 2. 🌟 1일부터 끝날까지 칸 만들고 데이터 매핑하기
+      for (let i = 1; i <= daysInMonth; i++) {
+        const dayEl = document.createElement('div');
+        dayEl.classList.add('calendar-day');
+        
+        const dayOfWeek = new Date(year, month, i).getDay();
+        if (dayOfWeek === 0) dayEl.classList.add('sun');
+        if (dayOfWeek === 6) dayEl.classList.add('sat');
+
+        const score = dailyDataList[i]; // 오늘 자 점수가 DB에 있는가?
+        let grade = '';
+        if (score !== undefined) {
+          grade = firebaseUtils.calculateGrade(score); // 100점 -> A로 변환!
         }
 
-        /**
-         * 특정 월의 안전 데이터를 가져옵니다 (더미 데이터 사용)
-         * @param {number} year 요청 연도
-         * @param {number} month 요청 월
-         * @returns {Promise<object>} 처리된 데이터 객체
-         */
-        async function fetchSafetyData(year, month) {
-            try {
-                // Firebase에서 실제 데이터 가져오기
-                const data = await fetchRealSafetyData(year, month);
-                
-                // 등급 카드 색상 결정 로직
-                let gradeColor = 'text-red-800 border-red-300 bg-red-50';
-                const rate = parseFloat(data.wearingRate); 
-                
-                if (rate >= 97) { gradeColor = 'text-green-800 border-green-300 bg-green-50'; }
-                else if (rate >= 93) { gradeColor = 'text-yellow-800 border-yellow-300 bg-yellow-50'; }
-                else if (rate >= 90) { gradeColor = 'text-orange-800 border-orange-300 bg-orange-50'; }
+        // 칸 내부 디자인 (날짜, 등급, 점구 표시)
+        dayEl.innerHTML = `
+          <div class="day-num">${i}</div>
+          <div class="day-grade ${grade || 'empty'}">${grade}</div>
+          <div class="day-point ${score !== undefined ? 'has-data' : ''}"></div>
+        `;
 
-                // 주간 라벨 생성
-                const weeklyLabels = data.weeklyRates.map((_, i) => `${i + 1}주차`);
+        // 🖱️ 클릭하면 상세 페이지로 날짜 던져주기 (나중에 피그마 설계도대로 그래프 그릴 곳!)
+        dayEl.addEventListener('click', () => {
+          const formattedDate = `${year}-${(month + 1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
+          window.location.href = `/detail.html?date=${formattedDate}`;
+        });
 
-                return {
-                    wearingRate: `${rate.toFixed(1)}%`,
-                    detectedCount: data.detectedCount.toLocaleString(),
-                    wearingCount: data.wearingCount.toLocaleString(),
-                    safetyGrade: data.safetyGrade,
-                    gradeColor: gradeColor,
-                    weeklyLabels: weeklyLabels,
-                    weeklyRates: data.weeklyRates
-                };
-            } catch (error) {
-                console.error(`Error fetching safety data for ${year}-${month}:`, error);
-                
-                // 오류 발생 시 오류 메시지 표시
-                return {
-                    wearingRate: "오류",
-                    detectedCount: "오류",
-                    wearingCount: "오류",
-                    safetyGrade: "X",
-                    gradeColor: 'text-red-800 border-red-300 bg-red-50',
-                    weeklyLabels: ["1주차", "2주차", "3주차", "4주차"],
-                    weeklyRates: [0, 0, 0, 0]
-                };
-            }
+        calendarBody.appendChild(dayEl);
+      }
+      
+      // 3. 📊 오른쪽 요약 카드 업데이트 (어제 성공한 26일 점수 덕분에 랭킹에 잡힐 겁니다!)
+      updateSummaries(year, month);
+    }
+
+    // 🌟 3. 주간/월간 요약 업데이트 마법 (어제 우리가 저장한 100점 덕분에 평균이 오를 겁니다!)
+    async function updateSummaries(year, month) {
+        if (typeof firebaseUtils === 'undefined') return;
+
+        // 월간 평균 (건우님 파일 `getMonthlyData` 함수 그대로 사용!)
+        console.log(`📡 파이어베이스에서 ${year}년 ${month + 1}월 평균 점수를 계산 중...`);
+        const monthlyScore = await firebaseUtils.getMonthlyData(year, month + 1);
+        
+        if (monthlyScore !== null && monthlyScore !== undefined) {
+            document.getElementById('monthlyScore').textContent = `${monthlyScore}%`;
+            document.getElementById('monthlyGrade').textContent = firebaseUtils.calculateGrade(monthlyScore);
+        } else {
+            document.getElementById('monthlyScore').textContent = `- %`;
+            document.getElementById('monthlyGrade').textContent = `-`;
         }
-
-        // --- 로딩 상태 UI 제어 ---
-        function setLoading(state) {
-            isLoading = state;
-            const elements = ['rate', 'detected', 'wearing', 'grade', 'prevBtn', 'nextBtn'];
-            
-            elements.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    if (id === 'prevBtn' || id === 'nextBtn') {
-                        el.disabled = state; // 버튼 비활성화
-                    } else if (id === 'grade') {
-                        el.textContent = state ? '...' : el.textContent; // 로딩 중 표시
-                    } else {
-                        el.textContent = state ? '...' : el.textContent; // 로딩 중 표시
-                    }
-                }
-            });
+        
+        // 🌟 주간 평균 (2026년 3월 4주차로 건우님이 100점 맞은 그 주를 자동으로 계산!)
+        let weekStartDate, weekEndDate;
+        const testDate = new Date(2026, 2, 26); // 건우님이 테스트한 3월 26일
+        
+        // 3월 26일이 포함된 주의 일요일~토요일 날짜 구하기
+        weekStartDate = new Date(testDate.setDate(testDate.getDate() - testDate.getDay()));
+        weekEndDate = new Date(testDate.setDate(testDate.getDate() - testDate.getDay() + 6));
+        
+        const formatForWeekly = (date) => `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+        
+        console.log(`📡 파이어베이스에서 이번 주(${formatForWeekly(weekStartDate)} ~ ${formatForWeekly(weekEndDate)}) 평균 점수를 계산 중...`);
+        const weeklyScore = await firebaseUtils.getWeeklyData(formatForWeekly(weekStartDate), formatForWeekly(weekEndDate));
+        
+        if (weeklyScore !== null && weeklyScore !== undefined) {
+            document.getElementById('weeklyScore').textContent = `${weeklyScore}%`;
+            document.getElementById('weeklyGrade').textContent = firebaseUtils.calculateGrade(weeklyScore);
+        } else {
+            document.getElementById('weeklyScore').textContent = `- %`;
+            document.getElementById('weeklyGrade').textContent = `-`;
         }
+    }
 
-        // --- 대시보드 업데이트 함수 (async로 변경) ---
-        async function updateDashboard() {
-            if (isLoading) return; // 이미 로딩 중이면 중복 실행 방지
-            setLoading(true);
+    // 버튼 이벤트
+    prevMonthBtn.addEventListener('click', () => {
+      currentDate.setMonth(currentDate.getMonth() - 1);
+      renderCalendar();
+    });
 
-            // 1. 월 레이블 업데이트 (즉시 반영)
-            document.getElementById("monthLabel").textContent = `${currentYear}년 ${currentMonth}월`;
+    nextMonthBtn.addEventListener('click', () => {
+      currentDate.setMonth(currentDate.getMonth() + 1);
+      renderCalendar();
+    });
 
-            // 2. 데이터 비동기 호출
-            const data = await fetchSafetyData(currentYear, currentMonth);
+    // 🌟 대망의 첫 달력 그리기! (어제 성공의 달콤한 열매를 맛볼 시간입니다 🍒)
+    renderCalendar();
 
-            // 3. 카드 데이터 업데이트
-            document.getElementById("rate").textContent = data.wearingRate;
-            document.getElementById("detected").textContent = data.detectedCount;
-            document.getElementById("wearing").textContent = data.wearingCount;
-            document.getElementById("grade").textContent = data.safetyGrade;
-
-            // 4. 등급 카드 스타일 업데이트
-            const gradeCard = document.getElementById("gradeCard");
-            // 기존 색상 클래스 제거 (Tailwind Classes)
-            gradeCard.className = gradeCard.className.replace(/(text-\w+-\d+|border-\w+-\d+|bg-\w+-\d+)/g, '').trim();
-            // 새 등급 색상 클래스 추가
-            gradeCard.className = `flex flex-col items-center rounded-xl shadow-lg p-5 w-40 md:w-48 transition hover:shadow-xl ${data.gradeColor}`;
-
-
-            // 5. 차트 데이터 업데이트
-            helmetChart.data.labels = data.weeklyLabels;
-            helmetChart.data.datasets[0].data = data.weeklyRates;
-            helmetChart.update();
-            
-            setLoading(false);
-        }
-
-        // --- 네비게이션 함수 (월 이동) ---
-        function prevMonth() {
-            currentMonth--;
-            if (currentMonth < 1) {
-                currentMonth = 12;
-                currentYear--;
-            }
-            updateDashboard();
-        }
-
-        function nextMonth() {
-            currentMonth++;
-            if (currentMonth > 12) {
-                currentMonth = 1;
-                currentYear++;
-            }
-            updateDashboard();
-        }
-
-        // --- 초기화 함수 ---
-        function initialize() {
-            const today = new Date();
-            currentYear = today.getFullYear();
-            currentMonth = today.getMonth() + 1; // getMonth()는 0부터 시작하므로 +1
-
-            // Chart.js 초기 설정
-            const ctx = document.getElementById('helmetChart').getContext('2d');
-            helmetChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [], // 초기 데이터 없음
-                    datasets: [{
-                        label: '착용률 (%)',
-                        data: [], // 초기 데이터 없음
-                        borderColor: '#3b82f6', // blue-500
-                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                        fill: true,
-                        tension: 0.4,
-                        borderWidth: 3,
-                        pointBackgroundColor: '#1d4ed8'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false, // 컨테이너 크기에 맞게 조절
-                    plugins: {
-                        legend: { display: true, position: 'top' },
-                        title: { display: false }
-                    },
-                    scales: {
-                        y: { 
-                            beginAtZero: true, 
-                            max: 100,
-                            title: { display: true, text: '착용률 (%)' }
-                        },
-                        x: {
-                            title: { display: true, text: '주차' }
-                        }
-                    }
-                }
-            });
-            
-            // 초기 대시보드 렌더링
-            updateDashboard();
-        }
-
-        /**
-         * Firebase에서 실제 안전 데이터 가져오기
-         * @param {number} year 연도
-         * @param {number} month 월
-         * @returns {object} 실제 안전 데이터
-         */
-        async function fetchRealSafetyData(year, month) {
-            try {
-                console.log(`🔥 Firebase에서 실제 데이터 로드: ${year}년 ${month}월`);
-                
-                // Firebase에서 해당 월의 모든 일별 데이터 가져오기
-                const daysInMonth = new Date(year, month, 0).getDate();
-                const dailyDataPromises = [];
-                
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const dateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-                    dailyDataPromises.push(firebaseUtils.getDailyData(dateString));
-                }
-                
-                const dailyResults = await Promise.all(dailyDataPromises);
-                const validResults = dailyResults.filter(result => result !== null && result !== undefined);
-                
-                console.log(`📊 유효한 일별 데이터: ${validResults.length}개 / ${daysInMonth}일`);
-                
-                if (validResults.length === 0) {
-                    console.warn('⚠️ 해당 월의 데이터가 없습니다.');
-                    return {
-                        wearingRate: 0,
-                        detectedCount: 0,
-                        wearingCount: 0,
-                        safetyGrade: 'N/A',
-                        weeklyRates: [0, 0, 0, 0],
-                        hasData: false
-                    };
-                }
-                
-                // 월간 평균 계산
-                const monthlyAverage = validResults.reduce((sum, val) => sum + val, 0) / validResults.length;
-                const baseRate = Math.round(monthlyAverage);
-                
-                // 추정 데이터 계산 (실제 착용률 기반)
-                const detectedCount = Math.floor(validResults.length * 25); // 일평균 25명 추정
-                const wearingCount = Math.floor(detectedCount * (baseRate / 100));
-                
-                // 주간 데이터 계산 (4주차로 분할)
-                const weeklyRates = [];
-                const weeksCount = Math.ceil(validResults.length / 7);
-                for (let week = 0; week < 4; week++) {
-                    const weekStart = week * 7;
-                    const weekEnd = Math.min((week + 1) * 7, validResults.length);
-                    const weekData = validResults.slice(weekStart, weekEnd);
-                    
-                    if (weekData.length > 0) {
-                        const weekAverage = weekData.reduce((sum, val) => sum + val, 0) / weekData.length;
-                        weeklyRates.push(Math.round(weekAverage));
-                    } else {
-                        weeklyRates.push(baseRate); // 데이터 없으면 월평균 사용
-                    }
-                }
-                
-                // 등급 계산
-                let safetyGrade = 'F';
-                if (baseRate >= 95) safetyGrade = 'A+';
-                else if (baseRate >= 90) safetyGrade = 'A';
-                else if (baseRate >= 85) safetyGrade = 'B';
-                else if (baseRate >= 80) safetyGrade = 'C';
-                else if (baseRate >= 70) safetyGrade = 'D';
-                
-                console.log(`✅ 실제 데이터 계산 완료: 평균 ${baseRate}%, 등급 ${safetyGrade}`);
-                
-                return {
-                    wearingRate: baseRate,
-                    detectedCount: detectedCount,
-                    wearingCount: wearingCount,
-                    safetyGrade: safetyGrade,
-                    weeklyRates: weeklyRates,
-                    hasData: true,
-                    dataSource: 'firebase',
-                    validDays: validResults.length
-                };
-                
-            } catch (error) {
-                console.error('❌ Firebase 데이터 로드 실패:', error);
-                
-                // 오류 시 기본값 반환
-                return {
-                    wearingRate: 0,
-                    detectedCount: 0,
-                    wearingCount: 0,
-                    safetyGrade: 'Error',
-                    weeklyRates: [0, 0, 0, 0],
-                    hasData: false,
-                    error: error.message
-                };
-            }
-        }
-
-        // 페이지 로드 시 초기화
-        window.onload = initialize;
-    </script>
+  </script>
 </body>
 </html>

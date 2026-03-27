@@ -3,142 +3,155 @@
 <head>
   <meta charset="UTF-8">
   <title>관리자 대시보드 - 멋쟁이사자처럼</title>
+  
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
   <style>
-    body { margin: 0; padding: 0; background-color: #f4f6f8; font-family: 'Malgun Gothic', sans-serif; display: flex; height: 100vh; overflow: hidden; }
-    .sidebar { width: 250px; background-color: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; padding: 20px 0; }
-    .sidebar-menu { list-style: none; padding: 0; margin: 0; }
-    .sidebar-menu li { padding: 15px 30px; font-size: 15px; color: #555; cursor: pointer; font-weight: 500; transition: 0.2s; }
-    .sidebar-menu li:hover { background-color: #f8f9fa; color: #FF7710; }
-    .sidebar-menu li.active { color: #FF7710; font-weight: bold; border-left: 4px solid #FF7710; }
-    .main-content { flex: 1; display: flex; flex-direction: column; padding: 30px 40px; overflow-y: auto; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
-    .header-title { text-align: center; width: 100%; position: relative; }
-    .logo-text { color: #FF7710; font-size: 28px; font-weight: bold; }
-    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
-    .admin-info { position: absolute; right: 0; top: 10px; font-size: 14px; color: #666; }
-    .logout-btn { background: none; border: none; color: #FF7710; cursor: pointer; font-weight: bold; margin-left: 10px; }
-    .control-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .course-select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; outline: none; }
-    .date-display { font-size: 18px; font-weight: bold; color: #333; }
-    .record-btn { background-color: #FF7710; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-    .record-btn:hover { background-color: #e66a00; }
-    .record-btn.recording { background-color: #dc3545; }
-    .table-container { background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; }
-    table { width: 100%; border-collapse: collapse; text-align: center; }
-    th, td { padding: 16px; border-bottom: 1px solid #eee; }
-    th { background-color: #f8f9fa; color: #555; font-weight: bold; font-size: 14px; }
-    td { font-size: 14px; color: #333; }
-    .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
-    .status-focused { background-color: #28a745; }
-    .status-drowsy { background-color: #dc3545; }
-    .status-waiting { background-color: #adb5bd; }
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; }
+    header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+    .logo-area { display: flex; align-items: center; gap: 15px; }
+    .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
+    .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
+    .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; }
+    
+    .container { display: flex; height: calc(100vh - 65px); }
+    
+    /* 사이드바 */
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; }
+    /* 기존 코드에서 아래 코드로 통째로 바꿔치기 해주세요! */
+    .menu-item { 
+        padding: 15px 20px; 
+        font-weight: bold; 
+        color: #555; 
+        cursor: pointer; 
+        transition: 0.2s; 
+        text-decoration: none; /* 밑줄 제거 */
+        display: block; /* 🌟 핵심: 가로 대신 세로로 블록처럼 쌓이게 만듦! */
+    }
+    .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
+    .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
+
+    /* 메인 컨텐츠 */
+    .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; }
+    .top-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    
+    .course-select { padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 16px; font-weight: bold; }
+    .class-toggle-btn { padding: 10px 20px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; }
+    .class-toggle-btn.started { background-color: #dc3545; }
+
+    /* 데이터 테이블 */
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    thead { background-color: #fcfcfc; border-bottom: 2px solid #eee; }
+    th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; }
+    th { color: #777; font-size: 14px; }
+    tbody tr:hover { background-color: #f9f9f9; }
+    
+    .status-badge { padding: 5px 10px; border-radius: 12px; font-size: 13px; font-weight: bold; }
+    .status-focus { background-color: #d4edda; color: #155724; }
+    .status-drowsy { background-color: #f8d7da; color: #721c24; animation: blink 1s infinite; }
+    .row-drowsy { background-color: #fff3f3 !important; }
+    
+    @keyframes blink { 50% { opacity: 0.5; } }
   </style>
 </head>
 <body>
-  <aside class="sidebar">
-    <ul class="sidebar-menu"><li class="active">수업 모니터링</li><li>월별 조회</li><li>과정별 집중도</li><li>목록 관리</li></ul>
-  </aside>
 
-  <main class="main-content">
-    <header>
-      <div class="header-title">
-        <div class="logo-text">멋쟁이사자처럼</div>
-        <div class="sub-text">AI NL 5기 과정 - 관리자 페이지</div>
-        <div class="admin-info">Admin님 <button class="logout-btn" id="logoutBtn">로그아웃</button></div>
-      </div>
-    </header>
-
-    <div class="control-bar">
-      <select class="course-select" id="courseFilter">
-        <option value="AI NL 5기">AI NL 5기</option><option value="AI CV 4기">AI CV 4기</option><option value="프론트엔드 3기">프론트엔드 3기</option>
-      </select>
-      <div class="date-display" id="currentDate"></div>
-      <button class="record-btn" id="recordBtn">기록 시작</button>
+  <header>
+    <div class="logo-area">
+      <div class="logo-text">멋쟁이사자처럼</div>
+      <div class="admin-badge">Admin</div>
     </div>
+    <button class="logout-btn" onclick="window.location.href='/'">로그아웃</button>
+  </header>
 
-    <div class="table-container">
+  <div class="container">
+    <div class="sidebar">
+      <a href="/admin_dashboard.html" class="menu-item active">수업 모니터링</a>
+      <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
+      <a href="/course_manage.html" class="menu-item">과정 관리</a>
+    </div>  
+
+    <div class="main-content">
+      <div class="top-controls">
+        <select class="course-select">
+          <option>AI NL 5기</option>
+        </select>
+        <button class="class-toggle-btn" id="classToggleBtn">수업 시작</button>
+      </div>
+
       <table>
-        <thead><tr><th>상태</th><th>이름</th><th>과정명</th><th>평균 집중도</th><th>이탈 횟수</th><th>접속 여부</th></tr></thead>
-        <tbody id="studentTableBody">
+        <thead>
+          <tr>
+            <th>번호</th>
+            <th>이름</th>
+            <th>과정명</th>
+            <th>상태</th>
+            <th>집중도</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody id="student-table-body">
           </tbody>
       </table>
     </div>
-  </main>
+  </div>
 
   <script src="/js/firebase-config.js"></script>
   <script>
-    // 날짜 세팅
-    const today = new Date();
-    document.getElementById('currentDate').innerHTML = `&lt; ${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일 &gt;`;
+    const tbody = document.getElementById('student-table-body');
+    const classToggleBtn = document.getElementById('classToggleBtn');
+    let isClassStarted = false;
 
-    // 1. 학생 리스트 실시간 감시 (기존과 동일)
-    const tableBody = document.getElementById('studentTableBody');
+    db.collection('settings').doc('class_status').onSnapshot((doc) => {
+        if(doc.exists) {
+            isClassStarted = doc.data().is_class_started;
+            if(isClassStarted) {
+                classToggleBtn.textContent = '기록 종료';
+                classToggleBtn.classList.add('started');
+            } else {
+                classToggleBtn.textContent = '기록 시작';
+                classToggleBtn.classList.remove('started');
+            }
+        }
+    });
+
+    classToggleBtn.addEventListener('click', () => {
+        const newState = !isClassStarted;
+        db.collection('settings').doc('class_status').set({ is_class_started: newState });
+    });
+
     db.collection('active_students').onSnapshot((snapshot) => {
-      tableBody.innerHTML = '';
-      snapshot.forEach((doc) => {
-        const student = doc.data();
-        let statusClass = 'status-waiting';
-        if (student.status === '집중') statusClass = 'status-focused';
-        if (student.status === '졸음' || student.status === '자리이탈') statusClass = 'status-drowsy';
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><span class="status-dot ${statusClass}"></span>${student.status}</td>
-          <td>${student.name}</td><td>${student.course}</td><td>${student.score}</td><td>${student.warnings}</td><td>O</td>
-        `;
-        tableBody.appendChild(tr);
-      });
-    });
-
-    // 2. 🌟 기록 시작 버튼 상태 완벽 동기화 로직
-    let isRecording = false;
-    const recordBtn = document.getElementById('recordBtn');
-    const statusRef = db.collection('settings').doc('class_status');
-
-    // DB의 현재 상태를 읽어와서 버튼 UI를 세팅함 (새로고침해도 상태 유지!)
-    statusRef.onSnapshot((doc) => {
-      if (doc.exists) {
-        isRecording = doc.data().is_class_started;
-        if (isRecording) {
-          recordBtn.textContent = '기록 종료';
-          recordBtn.classList.add('recording');
-        } else {
-          recordBtn.textContent = '기록 시작';
-          recordBtn.classList.remove('recording');
-          recordBtn.style.backgroundColor = ''; 
-          recordBtn.disabled = false;
+        tbody.innerHTML = '';
+        if(snapshot.empty) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
+            return;
         }
-      }
-    });
 
-    // 버튼 클릭 시 DB만 바꿈 (UI는 위의 onSnapshot이 알아서 바꿔줌)
-    recordBtn.addEventListener('click', async () => {
-      if (!isRecording) {
-        await statusRef.set({ is_class_started: true }, { merge: true });
-        alert("수업 기록을 시작합니다.");
-      } else {
-        if(confirm("기록을 종료하시겠습니까?")) {
-          await statusRef.set({ is_class_started: false }, { merge: true });
-        }
-      }
-    });
-    // 🌟 [추가] 저승사자 (하트비트 체크): 5초마다 순찰하며 끊긴 학생 강제 삭제
-    setInterval(() => {
-      db.collection('active_students').get().then((snapshot) => {
-        const now = Date.now();
+        let count = 1;
         snapshot.forEach((doc) => {
-          const student = doc.data();
-          // 마지막 생존 신고(lastActive)가 15초(15000ms) 이상 지났으면? -> "강제 종료한 학생"으로 간주!
-          if (student.lastActive && (now - student.lastActive > 15000)) {
-            console.log(`🚨 [순찰] ${student.name} 학생의 연결이 끊겼습니다. 명단에서 삭제합니다!`);
-            db.collection('active_students').doc(doc.id).delete(); // DB에서 삭제 (표에서도 자동 삭제됨)
-          }
+            const data = doc.data();
+            const tr = document.createElement('tr');
+            
+            let statusClass = 'status-badge';
+            if (data.status === '집중') statusClass += ' status-focus';
+            if (data.status.includes('졸음')) {
+                statusClass += ' status-drowsy';
+                tr.classList.add('row-drowsy');
+            }
+
+            tr.innerHTML = `
+                <td>${count++}</td>
+                <td style="font-weight: bold; color: #FF7710;">${data.name}</td>
+                <td>${data.course}</td>
+                <td><span class="${statusClass}">${data.status}</span></td>
+                <td style="font-weight: bold;">${data.score}</td>
+                <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
+            `;
+            tbody.appendChild(tr);
         });
-      });
-    }, 5000);
+    });
   </script>
 </body>
 </html>

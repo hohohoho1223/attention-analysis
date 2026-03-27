@@ -1,7 +1,7 @@
 {
-  "name": "likelion_attention",
+  "name": "helmo",
   "version": "1.0.0",
-  "description": "학습 집중도 모니터링 프로젝트",
+  "description": "사이드 임펙트 팀 웹사이트",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
