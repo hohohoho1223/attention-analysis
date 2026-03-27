@@ -54,7 +54,8 @@
           const user = result.user;
           console.log("로그인 성공:", user.email);
           
-          const adminEmails = ['slee9219@gmail.com', 'admin@mutsa.com']; 
+          // 🚨 관리자 이메일을 여기에 하드코딩해둡니다 (추후 DB 연동 가능)
+          const adminEmails = ['nornin9014@gmail.com','slee9219@gmail.com', 'admin@mutsa.com']; 
           
           if (adminEmails.includes(user.email)) {
             // 알림창 없이 조용히 관리자 페이지로 이동
