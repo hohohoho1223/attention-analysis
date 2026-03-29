@@ -4,14 +4,19 @@
 // 수업 모니터링용
 class RealtimeStatus {
     constructor(uid, name, course, status, currentScore, absentCount, lastUpdated = null){
-        this.uid = uid;
-        this.name = name;
-        this.course = course;
-        this.status = status;
-        this.currentScore = currentScore;
-        this.absentCount = absentCount;
-        this.lastUpdated = lastUpdated;
+      // 수정 불가  
+      this._uid = uid;
+      this._name = name;
+      this._course = course;
+
+      this.status = status;
+      this.currentScore = currentScore;
+      this.absentCount = absentCount;
+      this.lastUpdated = lastUpdated;
     } 
+    get uid() {return this._uid;}
+    get name() { return this._name; }
+    get course() { return this._course; }
 }
 
 // 2) converter

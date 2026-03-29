@@ -4,24 +4,32 @@
 // 과정 목록
 class Course {
     constructor(courseId, courseName, instructor, isActive = true, createdAt = null){
-        this.courseId = courseId;
+        // 수정 불가
+        this._courseId = courseId;
+        this._createdAt = createdAt;
+        // 수정 가능
         this.courseName = courseName;
         this.instructor = instructor;
         this.isActive = isActive;
-        this.createdAt = createdAt;
     } 
+
+    //getter
+    get courseId() {return this._courseId;}
+    get createdAt() {return this._createdAt;}
 }
 
 // 수업별 타임라인
 class CourseTimeline {
     constructor(date, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
-        this.date = date;
+        this._date = date;
+
         this.avgScore = avgScore;
         this.maxScore = maxScore;
         this.minScore = minScore;
         this.timelineScore = timelineScore;
         this.studentCount = studentCount;
     } 
+    get date() { return this._date; }
 }
 
 // 2) Converters

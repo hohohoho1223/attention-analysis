@@ -4,13 +4,20 @@
 // 1) Model
 class User{
   constructor(uid, email, name, course, role = "student", createdAt = null){
-    this.uid = uid;
-    this.email = email;
+    // 수정 불가
+    this._uid = uid;
+    this._email = email;
+    this._createdAt = createdAt; // DB에서 가져온 Timestamp 객체
+    // 수정 가능
     this.name = name;
     this.course = course;
     this.role = role;
-    this.createdAt = createdAt; // DB에서 가져온 Timestamp 객체
   }
+
+  // getter (수정 불가)
+  get uid() {return this._uid;}
+  get email() {return this._email;}
+  get createdAt() {return this._createdAt;}
 }
 
 // 2) converter (firebase에서 자동으로 변환)
