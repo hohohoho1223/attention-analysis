@@ -17,6 +17,14 @@ const firebaseConfig = {
   measurementId: "G-ZE8BC4E9X8"
 };
 
+// collection 이름 정의
+const COL_USERS = "users";
+const COL_DAILY_REPORT = "daily_report";
+const COL_DAILY_TIMELINE = "daily_timeline";
+const COL_COURSES = "courses";
+const COL_DAILY = "daily";
+const COL_REALTIME = "realtime";
+
 // Firebase 초기화 (Firestore용 CDN 방식)
 let db;
 let auth; // 🌟 구글 로그인을 위한 Auth 엔진
