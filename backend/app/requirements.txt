@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+tensorflow==2.19.0
+tf-keras==2.19.0
+mediapipe==0.10.9
+Pillow
+pydantic
+opencv-python
+protobuf<4
+numpy<2
+opencv-python
+scipy
+pandas
