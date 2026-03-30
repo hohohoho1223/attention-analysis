@@ -111,38 +111,53 @@
       
       const userDoc = await UserCRUD.getUser(user.uid);
       if (!userDoc || userDoc.role !== 'admin') { window.location.href = '/'; return; }
-    
+
       document.body.style.display = 'block';
 
+      const today = new Date().toISOString().split('T')[0];
       const tbody = document.getElementById('student-table-body');
       const classToggleBtn = document.getElementById('classToggleBtn');
       let isClassStarted = false;
-  
-      // COL_COURSES id 이후 변경 필요
-      const today = new Date().toISOString().split('T')[0];
-      db.collection(COL_COURSES).doc('AI NLP 5기')
+      const courseId = userDoc.courseId;
+
+      // stale 레코드 정리 (전날 생성된 realtime 삭제)
+      const realtimeSnapshot = await db
+          .collection(COL_COURSES)
+          .doc(courseId)
+          .collection('realtime')
+          .get();
+
+      realtimeSnapshot.docs.forEach(async (doc) => {
+          const lastUpdated = doc.data().lastUpdated?.toDate();
+          if (!lastUpdated) return;
+          const lastDate = lastUpdated.toISOString().split('T')[0];
+          if (lastDate < today) {
+              await RealtimeCRUD.deleteStatus(courseId, doc.id);
+          }
+      });
+
+      db.collection(COL_COURSES).doc(courseId)
         .collection(COL_COURSES_TIMELINE).doc(today)
         .onSnapshot((doc) => {
-          if(doc.exists) {
+          if (doc.exists) {
               isClassStarted = doc.data().isStarted === true;
-              if(isClassStarted) {
+              if (isClassStarted) {
                   classToggleBtn.textContent = '기록 종료';
                   classToggleBtn.classList.add('started');
               } else {
                   classToggleBtn.textContent = '기록 시작';
                   classToggleBtn.classList.remove('started');
               }
-          } else { // 문서가 없으면 (오늘 수업 시작 전)
-            isClassStarted = false;
-            classToggleBtn.textContent = '기록 시작';
-            classToggleBtn.classList.remove('started');
+          } else {
+              isClassStarted = false;
+              classToggleBtn.textContent = '기록 시작';
+              classToggleBtn.classList.remove('started');
           }
       });
-  
       classToggleBtn.addEventListener('click', () => {
           const today = new Date().toISOString().split('T')[0];
           const newState = !isClassStarted;
-          db.collection(COL_COURSES).doc('AI NLP 5기')
+          db.collection(COL_COURSES).doc(courseId)
             .collection(COL_COURSES_TIMELINE).doc(today)
             .set({ isStarted: newState }, { merge: true });
       });
@@ -181,7 +196,7 @@
           });
         });
       }
-        subscribeStudents('AI NLP 5기');
+        subscribeStudents(courseId);
     });
       </script>
 </body>

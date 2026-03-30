@@ -90,20 +90,6 @@
   <script src="/js/ai_logic.js"></script> 
   
   <script>
-    // exitBtn 대체
-    // 브라우저 창을 종료하고 10분 경과 시 자동 로그아웃
-    window.addEventListener('beforeunload', () => {
-    localStorage.setItem('browserClosedAt', Date.now());
-    });
-
-    const closedAt = localStorage.getItem('browserClosedAt');
-    if (closedAt) {
-      const elapsed = Date.now() - Number(closedAt);
-      if (elapsed > 10 * 60 * 1000) { // 10분 경과
-        auth.signOut();
-      }
-      localStorage.removeItem('browserClosedAt');
-    }
 
     // const submitBtn = document.getElementById('submitBtn');
     // const exitBtn = document.getElementById('exitBtn');
@@ -116,6 +102,7 @@
     const canvasCtx = canvasElement.getContext('2d');
     const waitingOverlay = document.getElementById('waitingOverlay');
 
+    let currentUser = null;
     let isClassStarted = false; 
     let aiInterval = null; 
     let lastAnalyzeTime = Date.now(); 
@@ -245,6 +232,8 @@
       // inputSection.style.display = 'none'; 
       webcamSection.style.display = 'block';
 
+      currentUser = user;
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         videoElement.srcObject = stream;
@@ -345,6 +334,16 @@
       // minuteScoreSum = 0;
       // minuteCount = 0;
       // isClassStarted = false; // 수업 상태 꺼짐으로 변경
+
+    // 브라우저 창을 닫으면 realtime 삭제
+    window.addEventListener('beforeunload', () => {
+        if (realtimeStatus && userDoc && currentUser) {
+            db.collection(COL_COURSES).doc(userDoc.courseId)
+              .collection('realtime').doc(currentUser.uid)
+              .delete();
+        }
+    });
+
       
     // 삭제 예정
     exitBtn.addEventListener('click', async () => {
@@ -356,12 +355,12 @@
         
         // 화면 전환
         webcamSection.style.display = 'none';
-        endSection.style.display = 'flex';
+        endSection.style.display = 'flex'
 
-      }
-    );
+    });
 
     // window.addEventListener('unload', () => { if (realtimeStatus) realtimeStatus.delete(); });
+  
   </script>
 </body>
 </html>
