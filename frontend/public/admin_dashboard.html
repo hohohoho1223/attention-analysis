@@ -76,9 +76,7 @@
 
     <div class="main-content">
       <div class="top-controls">
-        <select class="course-select">
-          <option>AI NLP 5기</option>
-        </select>
+        <select class="course-select" id="courseSelect">수업명</select>
         <button class="class-toggle-btn" id="classToggleBtn">수업 시작</button>
       </div>
 
@@ -102,8 +100,10 @@
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
   <script src="/js/models/admin_realtime.js"></script>
+  <script src="/js/models/course.js"></script>
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/admin_realtime.js"></script>
+  <script src="/js/crud/course.js"></script>
   
   <script>
     auth.onAuthStateChanged(async (user) => {
@@ -114,11 +114,29 @@
 
       document.body.style.display = 'block';
 
+      // 고도화 : sessionStorage로 db 매번 읽지 않게 하기
+
       const today = new Date().toISOString().split('T')[0];
       const tbody = document.getElementById('student-table-body');
       const classToggleBtn = document.getElementById('classToggleBtn');
       let isClassStarted = false;
       const courseId = userDoc.courseId;
+
+      const courseSelect = document.getElementById('courseSelect');
+
+      const courses = await CourseCRUD.getCourses();
+      courses.forEach(course => {
+        const option = document.createElement('option');
+        option.value = course.courseId;
+        option.textContent = course.courseName;
+        if (course.courseId === courseId) option.selected = true;
+        courseSelect.appendChild(option);
+      });
+
+      // 드롭다운 변경 시 해당 과정으로 전환
+      courseSelect.addEventListener('change', () => {
+        subscribeStudents(courseSelect.value);
+      });
 
       // stale 레코드 정리 (전날 생성된 realtime 삭제)
       const realtimeSnapshot = await db
