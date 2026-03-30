@@ -3,14 +3,15 @@
 
 // 1) Model
 class User{
-  constructor(uid, email, name, course, role = "student", createdAt = null){
+  constructor(uid, email, name, courseId, courseName, role = "student", createdAt = null){
     // 수정 불가
     this._uid = uid;
     this._email = email;
     this._createdAt = createdAt; // DB에서 가져온 Timestamp 객체
     // 수정 가능
     this.name = name;
-    this.course = course;
+    this.courseId = courseId; // 조회용
+    this.courseName = courseName;
     this.role = role;
   }
 
@@ -39,7 +40,8 @@ const userConverter = {
       snapshot.id,
       data.email,
       data.name,
-      data.course,
+      data.courseId,
+      data.courseName,
       userRole,
       data.createdAt
     );
@@ -51,7 +53,8 @@ const userConverter = {
       //uid는 파일명으로 변환되므로 db 저장하지 않음
       email: user.email,
       name: user.name,
-      course: user.course,
+      courseId: user.courseId,
+      courseName: user.courseName,
       role: user.role || "student", // null값 방어용
       createdAt: user.createdAt || firebase.firestore.FieldValue.serverTimestamp() // 값이 없을 시 신규 생성
     }
