@@ -20,9 +20,10 @@ class Course {
 
 // 수업별 타임라인
 class CourseTimeline {
-    constructor(date, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
+    constructor(date, isStarted, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
         this._date = date;
 
+        this.isStarted = isStarted;
         this.avgScore = avgScore;
         this.maxScore = maxScore;
         this.minScore = minScore;
@@ -61,6 +62,7 @@ const courseTLConverter = {
     const data = snapshot.data(options);
     return new CourseTimeline(
       snapshot.id, 
+      data.isStarted ?? true,
       data.avgScore || 0,
       data.maxScore || 0,
       data.minScore || 0,
@@ -72,6 +74,7 @@ const courseTLConverter = {
   toFirestore: (courseTL) => { 
     return { 
       // date
+      isStarted: courseTL.isStarted,
       avgScore: courseTL.avgScore,
       maxScore: courseTL.maxScore,
       minScore: courseTL.minScore,

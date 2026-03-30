@@ -22,7 +22,7 @@ const COL_USERS = "users";
 const COL_DAILY_REPORT = "daily_report";
 const COL_DAILY_TIMELINE = "daily_timeline";
 const COL_COURSES = "courses";
-const COL_DAILY = "daily";
+const COL_COURSES_TIMELINE = "course_timeline";
 const COL_REALTIME = "realtime";
 
 // Firebase 초기화 (Firestore용 CDN 방식)
