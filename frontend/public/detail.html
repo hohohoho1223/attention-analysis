@@ -37,7 +37,7 @@
     .chart-wrapper { position: relative; height: 400px; width: 100%; }
   </style>
 </head>
-<body>
+<body style="display:none;">
 
   <header>
     <a href="/month_result.html" class="back-btn">< 달력으로 돌아가기</a>
@@ -75,98 +75,108 @@
   <script src="/js/firebase-config.js"></script>
   
   <script>
-    // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetDate = urlParams.get('date');
-    
-    if (!targetDate) {
-        alert("잘못된 접근입니다. 달력에서 날짜를 선택해주세요.");
-        window.location.href = '/month_result.html';
-    }
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { window.location.href = '/'; return; }
+      
+      const userDoc = await UserCRUD.getUser(user.uid);
+      if (!userDoc || userDoc.role !== 'admin') { window.location.href = '/'; return; }
+      
+      document.body.style.display = 'block';
 
-    // 제목 업데이트
-    const dateParts = targetDate.split('-'); // [2026, 03, 26]
-    document.getElementById('pageTitle').textContent = `${dateParts[0]}년 ${parseInt(dateParts[1])}월 ${parseInt(dateParts[2])}일 상세 분석`;
+      // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetDate = urlParams.get('date');
+      
+      if (!targetDate) {
+          alert("잘못된 접근입니다. 달력에서 날짜를 선택해주세요.");
+          window.location.href = '/month_result.html';
+      }
+  
+      // 제목 업데이트
+      const dateParts = targetDate.split('-'); // [2026, 03, 26]
+      document.getElementById('pageTitle').textContent = `${dateParts[0]}년 ${parseInt(dateParts[1])}월 ${parseInt(dateParts[2])}일 상세 분석`;
+  
+      // 🌟 [임시 로직] 현재 DB에는 '하루치 평균 점수 1개'만 저장되어 있습니다.
+      // 피그마처럼 출렁이는 타임라인 그래프를 그리기 위해, 평균 점수를 바탕으로 가상의 타임라인 배열을 생성합니다.
+      // (추후 student_dashboard에서 분당 점수 배열을 DB에 통째로 저장하도록 업그레이드하면 완벽해집니다!)
+      async function loadDetailData() {
+          if (typeof db === 'undefined') return;
+  
+          const docId = targetDate.replace(/-/g, ''); 
+          const docRef = db.collection('helmo').doc('results').collection('daily').doc(docId);
+          const docSnap = await docRef.get();
+  
+          let realAvgScore = 0;
+          let realTimeline = []; // 🌟 DB에서 가져올 진짜 배열
+  
+          if (docSnap.exists) {
+              const data = docSnap.data();
+              realAvgScore = data.result || 0;
+              realTimeline = data.timeline || []; // 배열 가져오기!
+          } else {
+              document.getElementById('pageTitle').textContent += " (데이터 없음)";
+              return;
+          }
+  
+          // 만약 과거 데이터라서 타임라인 배열이 없다면 기본값 세팅
+          if (realTimeline.length === 0) {
+              realTimeline = [realAvgScore];
+          }
+  
+          // 최고/최저 점수 계산
+          const max = Math.max(...realTimeline);
+          const min = Math.min(...realTimeline);
+  
+          // x축 라벨 자동 생성 (진행 흐름에 따라 1, 2, 3...)
+          const labels = realTimeline.map((_, i) => `구간 ${i + 1}`);
+  
+          // 상단 카드에 꽂기
+          document.getElementById('avgScore').textContent = `${realAvgScore}%`;
+          document.getElementById('maxScore').textContent = `${max}%`;
+          document.getElementById('minScore').textContent = `${min}%`;
+  
+          // 📈 진짜 데이터로 그래프 그리기!
+          const ctx = document.getElementById('focusTimelineChart').getContext('2d');
+          const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+          gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
+          gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
+  
+          new Chart(ctx, {
+              type: 'line',
+              data: {
+                  labels: labels,
+                  datasets: [{
+                      label: ' 집중도 (%)',
+                      data: realTimeline, // 🌟 가짜 데이터 대신 찐 데이터 삽입!
+                      borderColor: '#FF7710',
+                      backgroundColor: gradient,
+                      borderWidth: 3,
+                      pointBackgroundColor: 'white',
+                      pointBorderColor: '#FF7710',
+                      pointBorderWidth: 2,
+                      pointRadius: 5,
+                      pointHoverRadius: 8,
+                      fill: true,
+                      tension: 0.4 
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                      y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
+                      x: { grid: { display: false } }
+                  },
+                  interaction: { intersect: false, mode: 'index' },
+              }
+          });
+      }
+  
+      // 로딩 즉시 실행!
+      loadDetailData();
+    });
 
-    // 🌟 [임시 로직] 현재 DB에는 '하루치 평균 점수 1개'만 저장되어 있습니다.
-    // 피그마처럼 출렁이는 타임라인 그래프를 그리기 위해, 평균 점수를 바탕으로 가상의 타임라인 배열을 생성합니다.
-    // (추후 student_dashboard에서 분당 점수 배열을 DB에 통째로 저장하도록 업그레이드하면 완벽해집니다!)
-    async function loadDetailData() {
-        if (typeof db === 'undefined') return;
-
-        const docId = targetDate.replace(/-/g, ''); 
-        const docRef = db.collection('helmo').doc('results').collection('daily').doc(docId);
-        const docSnap = await docRef.get();
-
-        let realAvgScore = 0;
-        let realTimeline = []; // 🌟 DB에서 가져올 진짜 배열
-
-        if (docSnap.exists) {
-            const data = docSnap.data();
-            realAvgScore = data.result || 0;
-            realTimeline = data.timeline || []; // 배열 가져오기!
-        } else {
-            document.getElementById('pageTitle').textContent += " (데이터 없음)";
-            return;
-        }
-
-        // 만약 과거 데이터라서 타임라인 배열이 없다면 기본값 세팅
-        if (realTimeline.length === 0) {
-            realTimeline = [realAvgScore];
-        }
-
-        // 최고/최저 점수 계산
-        const max = Math.max(...realTimeline);
-        const min = Math.min(...realTimeline);
-
-        // x축 라벨 자동 생성 (진행 흐름에 따라 1, 2, 3...)
-        const labels = realTimeline.map((_, i) => `구간 ${i + 1}`);
-
-        // 상단 카드에 꽂기
-        document.getElementById('avgScore').textContent = `${realAvgScore}%`;
-        document.getElementById('maxScore').textContent = `${max}%`;
-        document.getElementById('minScore').textContent = `${min}%`;
-
-        // 📈 진짜 데이터로 그래프 그리기!
-        const ctx = document.getElementById('focusTimelineChart').getContext('2d');
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
-        gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
-
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: ' 집중도 (%)',
-                    data: realTimeline, // 🌟 가짜 데이터 대신 찐 데이터 삽입!
-                    borderColor: '#FF7710',
-                    backgroundColor: gradient,
-                    borderWidth: 3,
-                    pointBackgroundColor: 'white',
-                    pointBorderColor: '#FF7710',
-                    pointBorderWidth: 2,
-                    pointRadius: 5,
-                    pointHoverRadius: 8,
-                    fill: true,
-                    tension: 0.4 
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
-                    x: { grid: { display: false } }
-                },
-                interaction: { intersect: false, mode: 'index' },
-            }
-        });
-    }
-
-    // 로딩 즉시 실행!
-    loadDetailData();
   </script>
 </body>
 </html>

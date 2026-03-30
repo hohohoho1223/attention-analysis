@@ -57,9 +57,10 @@
     tbody tr:hover { background-color: #fffaf0; }
     .role-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; background-color: #e9ecef; color: #495057; }
     .role-badge.student { background-color: #e0f3ff; color: #007bff; }
+    .course-item input[type="checkbox"] {margin-right: 8px;}
   </style>
 </head>
-<body>
+<body style="display:none;">
 
   <header>
     <div class="logo-area">
@@ -91,11 +92,7 @@
               <button class="action-btn btn-save" onclick="saveCourseChanges()">저장</button>
           </div>
         </div>
-
-        <div class="course-item active" onclick="selectCourse(this, 'AI NLP 5기')">AI NLP 5기</div>
-        <div class="course-item" onclick="selectCourse(this, 'AI CV 4기')">AI CV 4기</div>
-        <div class="course-item" onclick="selectCourse(this, '백엔드 3기')">백엔드 3기</div>
-        <div class="course-item" onclick="selectCourse(this, '프론트엔드 3기')">프론트엔드 3기</div>
+        <!-- <div class="course-item" onclick="selectCourse(this, '프론트엔드 3기')">프론트엔드 3기</div> -->
       </div>
 
       <div class="student-panel">
@@ -126,113 +123,136 @@
   </div>
 
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/course.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/course.js"></script>
   <script>
-    const tbody = document.getElementById('student-list-body');
-    const courseTitle = document.getElementById('currentCourseTitle');
-
-    // 수정/생성/삭제 상태
-    var state = {
-      currentCourse: null,             // 초기 null → renderCourseList() 후 첫번째 Course 객체로 세팅
-      courseEditMode: false,           // 과정 수정 모드 여부
-      studentEditMode: false,          // 학생 수정 모드 여부
-      selectedCourses: [],             // 삭제할 과정 (체크박스)
-      selectedStudents: [],            // 삭제할 학생 (체크박스)
-    };
-
-    // 🌟 PM의 센스! 빈 화면을 보여주지 않기 위한 '가짜(Mock) 학생 데이터'
-    // 나중에 파이어베이스 Authentication(회원가입 기능)을 붙이면 이걸 진짜 DB 호출로 바꾸면 됩니다.
-    const mockStudents = {
-        'AI NLP 5기': [
-            { name: '이건우', role: 'Student', email: 'geonwu@likelion.org' },
-            { name: '김멋사', role: 'Student', email: 'mutsa_kim@gmail.com' },
-            { name: '송무식', role: 'Student', email: 'musik@likelion.org' },
-            { name: '박해커', role: 'Student', email: 'hacker_p@gmail.com' }
-        ],
-        'AI CV 4기': [
-            { name: '최비전', role: 'Student', email: 'cv_choi@gmail.com' },
-            { name: '정영상', role: 'Student', email: 'image_jung@naver.com' }
-        ],
-        '백엔드 3기': [
-            { name: '서버왕', role: 'Student', email: 'server_king@gmail.com' }
-        ],
-        '프론트엔드 3기': []
-    };
-
-    // 토글 sidebar
     function toggleSidebar() {
       document.querySelector('.sidebar').classList.toggle('collapsed');
     }
+    auth.onAuthStateChanged(async (user) => { // 권한 확인
+      if (!user) { window.location.href = '/'; return; }
+      
+      const userDoc = await UserCRUD.getUser(user.uid);
+      if (!userDoc || userDoc.role !== 'admin') { 
+        window.location.href = '/'; 
+        return; 
+      }
+      document.body.style.display = 'block';
 
-    // 토글 수정-> 생성/저장/삭제 버튼
-    function toggleEditMode(type) {
-      // type: 'course' | 'student'
-      var isEdit = !state[type + 'EditMode'];
-      state[type + 'EditMode'] = isEdit;
-
-      var editBtn      = document.getElementById(type + 'EditBtn');
-      var editControls = document.getElementById(type + 'EditControls');
-
-      editBtn.style.display      = isEdit ? 'none' : 'inline-block';
-      editControls.style.display = isEdit ? 'flex' : 'none';
-    }
-
-    // active-btn
-    function saveCourseChanges() {
-      // TODO: Firestore 저장 로직
-      toggleEditMode('course');
-    }
-
-    function saveStudentChanges() {
-      // TODO: Firestore 저장 로직
-      toggleEditMode('student');
-    }
-
-    function addCourse() {
-      // TODO
-    }
-
-    function deleteCourse() {
-      // TODO
-    }
-
-    function deleteStudent() {
-      // TODO
-    }
-
-    // 과정 클릭 시 UI 변경 및 데이터 로드 함수
-    function selectCourse(element, courseName) {
-        // 1. 활성화(주황색) UI 이동
-        document.querySelectorAll('.course-item').forEach(el => el.classList.remove('active'));
-        element.classList.add('active');
-
-        // 2. 학생 목록 테이블 렌더링
-        renderStudentTable(courseName);
-    }
-
-    // 학생 테이블 그리기
-    function renderStudentTable(courseName) {
-        tbody.innerHTML = ''; // 테이블 초기화
-        const students = mockStudents[courseName] || [];
-
-        if (students.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="padding: 40px; color: #aaa;">등록된 학생이 없습니다.</td></tr>';
-            return;
+      const tbody = document.getElementById('student-list-body');
+      const courseTitle = document.getElementById('currentCourseTitle');
+      
+      // 수정/생성/삭제 상태
+      var state = {
+        currentCourse: null,             // 초기 null → renderCourseList() 후 첫번째 Course 객체로 세팅
+        courseEditMode: false,           // 과정 수정 모드 여부
+        studentEditMode: false,          // 학생 수정 모드 여부
+        selectedCourses: [],             // 삭제할 과정 (체크박스)
+        selectedStudents: [],            // 삭제할 학생 (체크박스)
+      };
+      
+      async function renderCourseList() {
+        const courses = await CourseCRUD.getCourses();
+        const coursePanel = document.querySelector('.course-panel');
+      
+        if (courses.length === 0) {
+          coursePanel.innerHTML += '<p style="color:#aaa; font-size:14px;">등록된 과정이 없습니다.</p>';
+          return;
         }
 
-        students.forEach((student, index) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${index + 1}</td>
-                <td style="font-weight: bold; color: #333;">${student.name}</td>
-                <td><span class="role-badge student">${student.role}</span></td>
-                <td style="color: #666;">${student.email}</td>
-            `;
-            tbody.appendChild(tr);
+        courses.forEach((course, index) => {
+          const div = document.createElement('div');
+          div.className = 'course-item' + (index === 0 ? ' active' : '');
+          div.textContent = course.courseName;
+          div.onclick = () => selectCourse(div, course);
+          coursePanel.appendChild(div);
         });
-    }
 
-    // 페이지 로드 시 'AI NLP 5기' 기본 렌더링
-    renderStudentTable('AI NLP 5기');
+        // 첫번째 과정 기본 렌더링
+        state.currentCourse = courses[0];
+        courseTitle.textContent = courses[0].courseName;
+        renderStudentTable(courses[0].courseId);
+      }
+  
+      // 토글 sidebar
+      function toggleSidebar() {
+        document.querySelector('.sidebar').classList.toggle('collapsed');
+      }
+  
+      // 토글 수정-> 생성/저장/삭제 버튼
+      function toggleEditMode(type) {
+        // type: 'course' | 'student'
+        var isEdit = !state[type + 'EditMode'];
+        state[type + 'EditMode'] = isEdit;
+  
+        var editBtn      = document.getElementById(type + 'EditBtn');
+        var editControls = document.getElementById(type + 'EditControls');
+  
+        editBtn.style.display      = isEdit ? 'none' : 'inline-block';
+        editControls.style.display = isEdit ? 'flex' : 'none';
+      }
+  
+      // active-btn
+      function saveCourseChanges() {
+        // TODO: Firestore 저장 로직
+        toggleEditMode('course');
+      }
+  
+      function saveStudentChanges() {
+        // TODO: Firestore 저장 로직
+        toggleEditMode('student');
+      }
+  
+      function addCourse() {
+        // TODO
+      }
+  
+      function deleteCourse() {
+        // TODO
+      }
+  
+      function deleteStudent() {
+        // TODO
+      }
+  
+      // 과정 클릭 시 UI 변경 및 데이터 로드 함수
+      function selectCourse(element, course) {
+          // 1. 활성화(주황색) UI 이동
+          document.querySelectorAll('.course-item').forEach(el => el.classList.remove('active'));
+          element.classList.add('active');
+          courseTitle.textContent = course.courseName;
+          state.currentCourse = course;
+  
+          // 2. 학생 목록 테이블 렌더링
+          renderStudentTable(course.courseId);
+      }
+  
+      // 학생 테이블 그리기
+      async function renderStudentTable(courseId) {
+          tbody.innerHTML = ''; // 테이블 초기화
+          const students = await CourseCRUD.getStudentsByCourse(courseId);
+
+          if (students.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="4" style="padding: 40px; color: #aaa;">등록된 학생이 없습니다.</td></tr>';
+              return;
+          }
+  
+          students.forEach((student, index) => {
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                  <td>${index + 1}</td>
+                  <td style="font-weight: bold; color: #333;">${student.name}</td>
+                  <td><span class="role-badge student">${student.role}</span></td>
+                  <td style="color: #666;">${student.email}</td>
+              `;
+              tbody.appendChild(tr);
+          });
+      }
+  
+      renderCourseList();
+    });
 
   </script>
 </body>

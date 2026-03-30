@@ -90,6 +90,21 @@
   <script src="/js/ai_logic.js"></script> 
   
   <script>
+    // exitBtn 대체
+    // 브라우저 창을 종료하고 10분 경과 시 자동 로그아웃
+    window.addEventListener('beforeunload', () => {
+    localStorage.setItem('browserClosedAt', Date.now());
+    });
+
+    const closedAt = localStorage.getItem('browserClosedAt');
+    if (closedAt) {
+      const elapsed = Date.now() - Number(closedAt);
+      if (elapsed > 10 * 60 * 1000) { // 10분 경과
+        auth.signOut();
+      }
+      localStorage.removeItem('browserClosedAt');
+    }
+
     // const submitBtn = document.getElementById('submitBtn');
     // const exitBtn = document.getElementById('exitBtn');
     // const inputSection = document.getElementById('input-section');
@@ -204,6 +219,7 @@
       canvasCtx.restore();
     });
         
+
     // 임시저장(1분) 및 타임라인(10분)
     let tempInterval = null; // 1분
     let timelineInterval = null; // 10분
@@ -217,8 +233,14 @@
       if (!user) { window.location.href = '/'; return; }
 
       userDoc = await UserCRUD.getUser(user.uid); // 유저 정보
-      if (!userDoc) { window.location.href = '/'; return; }
-      if (userDoc.role !== 'student') { return; } // 만약 student가 아니면 realtime 만들지 않도록 함
+      if (!userDoc) { 
+        window.location.href = '/'; 
+        return; 
+      }
+      if (userDoc.role !== 'student') {  // 만약 student가 아니면 realtime 만들지 않도록 함
+        window.location.href = '/admin_dashboard.html'; 
+        return; 
+      }
       displayName.textContent = userDoc.name;
       // inputSection.style.display = 'none'; 
       webcamSection.style.display = 'block';
@@ -324,6 +346,7 @@
       // minuteCount = 0;
       // isClassStarted = false; // 수업 상태 꺼짐으로 변경
       
+    // 삭제 예정
     exitBtn.addEventListener('click', async () => {
         // 대기열 삭제
         if (realtimeStatus) await realtimeStatus.delete();
