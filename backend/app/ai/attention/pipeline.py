@@ -91,16 +91,36 @@ class AttentionPipeline:
         print(f"🛡️ AI 방어막 모델({model_name})을 로드하는 중...")
         try:
             import tensorflow as tf
+            from tensorflow.keras.layers import Layer
+
+            class DummyLayer(Layer):
+                def __init__(self, *args, **kwargs):
+                    safe_kwargs = {}
+                    for k in ["name", "trainable", "dtype"]:
+                        if k in kwargs:
+                            safe_kwargs[k] = kwargs[k]
+                    super(DummyLayer, self).__init__(**safe_kwargs)
+
+                def call(self, inputs, **kwargs):
+                    return inputs
+
+            custom_objects = {
+                "TFOpLambda": DummyLayer,
+                "RandomFlip": DummyLayer,
+                "RandomRotation": DummyLayer,
+                "RandomZoom": DummyLayer,
+                "RandomBrightness": DummyLayer,
+                "RandomTranslation": DummyLayer,
+                "RandomContrast": DummyLayer,
+                "Rescaling": DummyLayer,
+            }
 
             self.tf = tf
-            try:
-                self.defense_model = tf.keras.models.load_model(model_path, compile=False)
-            except Exception:
-                self.defense_model = tf.keras.models.load_model(
-                    model_path,
-                    compile=False,
-                    safe_mode=False,
-                )
+            self.defense_model = tf.keras.models.load_model(
+                model_path,
+                custom_objects=custom_objects,
+                compile=False,
+            )
             print("✅ 1티어 방어막 모델 로드 완료!")
         except Exception as e:
             self.defense_model = None

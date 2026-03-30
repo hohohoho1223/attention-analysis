@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import os
+# 🌟 [가장 중요] 최신 텐서플로우에게 옛날(Keras 2) 엔진을 사용하라고 강제 명령! (무조건 맨 위에 있어야 합니다)
+# ai_serveㅇr/main.py에서 설정한 것과 동일하게 환경변수를 설정하여 TensorFlow가 레거시 Keras 엔진을 사용하도록 강제합니다. 이렇게 하면 모델 호환성 문제를 방지할 수 있습니다.
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import argparse
 import mediapipe as mp
 from ai.attention.analyzers.attention_logic import AttentionConfig, DEFAULT_ATTENTION_CONFIG
