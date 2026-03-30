@@ -175,7 +175,7 @@ class AttentionPipeline:
         pose_angles = PoseAngles()
         gaze_direction = "Unknown"
         blink_bpm = 0
-        eye_focus_score = 0.0
+        eye_focus_score = 100.0
         eye_status_msg = "Face Not Detected (Eye disabled)"
         current_face_landmarks = None
         upper_body_state = UpperBodyState()
