@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>수업별 타임라인 - 멋쟁이사자처럼</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* 🎨 멋사 시그니처 테마 */
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; color: #333; min-height: 100vh; }
+    header { width: 100%; padding: 20px 0; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: relative; }
+    .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
+    .back-btn { background-color: #f1f3f5; color: #555; border: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; cursor: pointer; position: absolute; left: 40px; top: 25px; text-decoration: none; font-weight: bold; transition: 0.2s; }
+    .back-btn:hover { background-color: #e9ecef; color: #FF7710; }
+    
+    .container { width: 90%; max-width: 1000px; margin: 40px 0; }
+    .page-title { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 20px; border-left: 5px solid #FF7710; padding-left: 15px; }
+    
+    /* 📊 상단 요약 카드 */
+    .stats-container { display: flex; gap: 20px; margin-bottom: 30px; }
+    .stat-card { flex: 1; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; border-bottom: 3px solid transparent; transition: 0.3s; }
+    .stat-card:hover { border-bottom: 3px solid #FF7710; transform: translateY(-3px); }
+    .stat-label { font-size: 14px; color: #777; margin-bottom: 10px; }
+    .stat-value { font-size: 28px; font-weight: bold; color: #333; }
+    .stat-value.highlight { color: #FF7710; }
+    .stat-value.good { color: #28a745; }
+    .stat-value.bad { color: #dc3545; }
+
+    /* 📈 그래프 영역 */
+    .chart-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .chart-title { font-size: 16px; font-weight: bold; color: #555; }
+    .chart-wrapper { position: relative; height: 400px; width: 100%; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a href="/admin_dashboard.html" class="back-btn">< 대시보드로 돌아가기</a>
+    <div class="logo-text">멋쟁이사자처럼</div>
+  </header>
+
+  <div class="container">
+    
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <div class="page-title" id="pageTitle">수업별 타임라인</div>
+        <div style="display: flex; gap: 10px;">
+            <select id="coursePicker">
+                <option value="ai_nlp_5">AI NLP 5기</option>
+                <option value="ai_cv_4">AI CV 4기</option>
+                <option value="frontend">프론트엔드</option>
+            </select>
+            <input type="date" id="datePicker">
+        </div>
+    </div>
+
+    <div class="stats-container">
+      <div class="stat-card">
+        <div class="stat-label">평균 집중도</div>
+        <div class="stat-value highlight" id="avgScore">- %</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">최고 집중도</div>
+        <div class="stat-value good" id="maxScore">- %</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">최저 집중도</div>
+        <div class="stat-value bad" id="minScore">- %</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">🕒 수업 시간별 집중도 변화</div>
+      </div>
+      <div class="chart-wrapper">
+        <div id="noDataMsg" style="display:none; text-align:center; padding: 40px; color: #999;">
+            선택한 날짜의 데이터가 없습니다.
+        </div>
+        <canvas id="focusTimelineChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  
+  <script>
+    // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
+    const urlParams = new URLSearchParams(window.location.search);
+    const today = new Date().toISOString().split('T')[0];
+    const targetDate = urlParams.get('date') || today;
+
+    document.addEventListener('DOMContentLoaded', () => {
+    const datePicker = document.getElementById('datePicker');
+    const coursePicker = document.getElementById('coursePicker');
+    
+    datePicker.value = today;
+
+    coursePicker.addEventListener('change', () => {
+        loadDetailData(coursePicker.value, datePicker.value);
+    });
+
+    datePicker.addEventListener('change', () => {
+        loadDetailData(coursePicker.value, datePicker.value);
+    });
+
+    loadDetailData(coursePicker.value, datePicker.value);
+    });
+
+    // 🌟 [임시 로직] 현재 DB에는 '하루치 평균 점수 1개'만 저장되어 있습니다.
+    // 피그마처럼 출렁이는 타임라인 그래프를 그리기 위해, 평균 점수를 바탕으로 가상의 타임라인 배열을 생성합니다.
+    // (추후 student_dashboard에서 분당 점수 배열을 DB에 통째로 저장하도록 업그레이드하면 완벽해집니다!)
+    async function loadDetailData(courseId, date) {
+        const dateParts = date.split('-');
+        document.getElementById('pageTitle').textContent = `수업별 타임라인 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
+
+        if (typeof db === 'undefined') return;
+
+        const docId = targetDate.replace(/-/g, ''); 
+        const docRef = db.collection('helmo').doc('results').collection('daily').doc(docId);
+        const docSnap = await docRef.get();
+
+        let realAvgScore = 0;
+        let realTimeline = []; // 🌟 DB에서 가져올 진짜 배열
+
+        if (docSnap.exists) {
+            document.getElementById('noDataMsg').style.display = 'none';
+             document.getElementById('focusTimelineChart').style.display = 'block';
+            const data = docSnap.data();
+            realAvgScore = data.result || 0;
+            realTimeline = data.timeline || []; // 배열 가져오기!
+        } else {
+            document.getElementById('avgScore').textContent = `- %`;
+            document.getElementById('maxScore').textContent = `- %`;
+            document.getElementById('minScore').textContent = `- %`;
+            document.getElementById('noDataMsg').style.display = 'block';
+            document.getElementById('focusTimelineChart').style.display = 'none'; // 차트 숨기기
+            return;
+        }
+
+        // 만약 과거 데이터라서 타임라인 배열이 없다면 기본값 세팅
+        if (realTimeline.length === 0) {
+            realTimeline = [realAvgScore];
+        }
+
+        // 최고/최저 점수 계산
+        const max = Math.max(...realTimeline);
+        const min = Math.min(...realTimeline);
+
+        // x축 라벨 자동 생성 (진행 흐름에 따라 1, 2, 3...)
+        const labels = realTimeline.map((_, i) => `구간 ${i + 1}`);
+
+        // 상단 카드에 꽂기
+        document.getElementById('avgScore').textContent = `${realAvgScore}%`;
+        document.getElementById('maxScore').textContent = `${max}%`;
+        document.getElementById('minScore').textContent = `${min}%`;
+
+        // 📈 진짜 데이터로 그래프 그리기!
+        const ctx = document.getElementById('focusTimelineChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: ' 집중도 (%)',
+                    data: realTimeline, // 🌟 가짜 데이터 대신 찐 데이터 삽입!
+                    borderColor: '#FF7710',
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointBackgroundColor: 'white',
+                    pointBorderColor: '#FF7710',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    fill: true,
+                    tension: 0.4 
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
+                    x: { grid: { display: false } }
+                },
+                interaction: { intersect: false, mode: 'index' },
+            }
+        });
+    }
+
+  </script>
+</body>
+</html>

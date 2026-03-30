@@ -43,7 +43,7 @@ var UserCRUD = {
         }
     },
 
-    // 🗑️ 4. 삭제 (Delete)
+    // 4. 삭제 (Delete)
     deleteUser: async function(uid) {
         try {
             await db.collection(COL_USERS).doc(uid).delete();

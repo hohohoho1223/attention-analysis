@@ -10,6 +10,7 @@
   
   <style>
     /* 🎨 멋사 시그니처 & 관리자 공통 테마 */
+    .sidebar, .panel-title, .course-item, .b { user-select: none; }
     body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; }
     header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
     .logo-area { display: flex; align-items: center; gap: 15px; }
@@ -19,7 +20,8 @@
     .container { display: flex; height: calc(100vh - 65px); }
     
     /* 🌟 왼쪽 사이드바 (피그마 메뉴 연동) */
-    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; }
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap;}
+    .sidebar.collapsed {width: 0; padding: 0;}
     .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
     .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
     .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
@@ -28,20 +30,25 @@
     .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; display: flex; gap: 30px; }
     
     /* 왼쪽: 과정 목록 패널 */
-    .course-panel { width: 250px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); height: fit-content; }
+    .course-panel { width: 250px; flex: 1; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); height: fit-content; }
     .panel-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #FF7710; display: flex; justify-content: space-between; align-items: center; }
     .course-item { padding: 12px 15px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 6px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; font-size: 14px; font-weight: bold; color: #555; }
     .course-item:hover { border-color: #FF7710; color: #FF7710; }
     .course-item.active { background-color: #FF7710; color: white; border-color: #FF7710; box-shadow: 0 2px 8px rgba(255,119,16,0.3); }
 
     /* 오른쪽: 학생 관리 테이블 패널 */
-    .student-panel { flex-grow: 1; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .student-panel { flex-grow: 1; flex: 3; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
     .top-controls { display: flex; justify-content: flex-end; margin-bottom: 15px; gap: 10px; }
     .action-btn { padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 13px; }
     .btn-edit { background-color: #f1f3f5; color: #555; border: 1px solid #ddd; }
     .btn-edit:hover { background-color: #e2e6ea; }
     .btn-save { background-color: #FF7710; color: white; border: none; }
     .btn-save:hover { background-color: #e66a00; }
+
+    #courseEditControls, #studentEditControls {
+      display: flex;
+      gap: 0.5rem;
+    }
 
     table { width: 100%; border-collapse: collapse; }
     thead { background-color: #fcfcfc; border-top: 1px solid #ddd; border-bottom: 2px solid #eee; }
@@ -56,6 +63,8 @@
 
   <header>
     <div class="logo-area">
+      <button id="sidebarToggleBtn" onclick="toggleSidebar()" 
+        style="background:none; cursor:pointer; border:none; font-size:20px; cursor:pointer; color:#555;">☰</button>
       <div class="logo-text">멋쟁이사자처럼</div>
       <div class="admin-badge">Admin</div>
     </div>
@@ -72,8 +81,18 @@
     <div class="main-content">
       
       <div class="course-panel">
-        <div class="panel-title">과정 목록</div>
-        <div class="course-item active" onclick="selectCourse(this, 'AI NL 5기')">AI NL 5기</div>
+        <div class="panel-title">
+          <span>과정 목록</span>
+          <button id="courseEditBtn" class="action-btn btn-edit" onclick="toggleEditMode('course')">수정</button>
+          <!-- 수정 모드일 때만 보이는 버튼들 -->
+          <div id="courseEditControls" style="display:none;">
+              <button class="action-btn btn-edit" onclick="addCourse()">생성</button>
+              <button class="action-btn btn-edit" onclick="deleteCourse()">삭제</button>
+              <button class="action-btn btn-save" onclick="saveCourseChanges()">저장</button>
+          </div>
+        </div>
+
+        <div class="course-item active" onclick="selectCourse(this, 'AI NLP 5기')">AI NLP 5기</div>
         <div class="course-item" onclick="selectCourse(this, 'AI CV 4기')">AI CV 4기</div>
         <div class="course-item" onclick="selectCourse(this, '백엔드 3기')">백엔드 3기</div>
         <div class="course-item" onclick="selectCourse(this, '프론트엔드 3기')">프론트엔드 3기</div>
@@ -81,10 +100,11 @@
 
       <div class="student-panel">
         <div class="panel-title">
-          <span id="currentCourseTitle">AI NL 5기 - 학생 관리</span>
-          <div class="top-controls">
-            <button class="action-btn btn-edit">수정</button>
-            <button class="action-btn btn-save">저장</button>
+          <span id="currentCourseTitle">학생 관리</span>
+          <button id="studentEditBtn" class="action-btn btn-edit" onclick="toggleEditMode('student')">수정</button>
+          <div id="studentEditControls" style="display:none;">
+            <button class="action-btn btn-edit" onclick="deleteStudent()">삭제</button>
+            <button class="action-btn btn-save" onclick="saveStudentChanges()">저장</button>
           </div>
         </div>
 
@@ -110,10 +130,19 @@
     const tbody = document.getElementById('student-list-body');
     const courseTitle = document.getElementById('currentCourseTitle');
 
+    // 수정/생성/삭제 상태
+    var state = {
+      currentCourse: null,             // 초기 null → renderCourseList() 후 첫번째 Course 객체로 세팅
+      courseEditMode: false,           // 과정 수정 모드 여부
+      studentEditMode: false,          // 학생 수정 모드 여부
+      selectedCourses: [],             // 삭제할 과정 (체크박스)
+      selectedStudents: [],            // 삭제할 학생 (체크박스)
+    };
+
     // 🌟 PM의 센스! 빈 화면을 보여주지 않기 위한 '가짜(Mock) 학생 데이터'
     // 나중에 파이어베이스 Authentication(회원가입 기능)을 붙이면 이걸 진짜 DB 호출로 바꾸면 됩니다.
     const mockStudents = {
-        'AI NL 5기': [
+        'AI NLP 5기': [
             { name: '이건우', role: 'Student', email: 'geonwu@likelion.org' },
             { name: '김멋사', role: 'Student', email: 'mutsa_kim@gmail.com' },
             { name: '송무식', role: 'Student', email: 'musik@likelion.org' },
@@ -129,16 +158,54 @@
         '프론트엔드 3기': []
     };
 
+    // 토글 sidebar
+    function toggleSidebar() {
+      document.querySelector('.sidebar').classList.toggle('collapsed');
+    }
+
+    // 토글 수정-> 생성/저장/삭제 버튼
+    function toggleEditMode(type) {
+      // type: 'course' | 'student'
+      var isEdit = !state[type + 'EditMode'];
+      state[type + 'EditMode'] = isEdit;
+
+      var editBtn      = document.getElementById(type + 'EditBtn');
+      var editControls = document.getElementById(type + 'EditControls');
+
+      editBtn.style.display      = isEdit ? 'none' : 'inline-block';
+      editControls.style.display = isEdit ? 'flex' : 'none';
+    }
+
+    // active-btn
+    function saveCourseChanges() {
+      // TODO: Firestore 저장 로직
+      toggleEditMode('course');
+    }
+
+    function saveStudentChanges() {
+      // TODO: Firestore 저장 로직
+      toggleEditMode('student');
+    }
+
+    function addCourse() {
+      // TODO
+    }
+
+    function deleteCourse() {
+      // TODO
+    }
+
+    function deleteStudent() {
+      // TODO
+    }
+
     // 과정 클릭 시 UI 변경 및 데이터 로드 함수
     function selectCourse(element, courseName) {
         // 1. 활성화(주황색) UI 이동
         document.querySelectorAll('.course-item').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
 
-        // 2. 타이틀 변경
-        courseTitle.textContent = `${courseName} - 학생 관리`;
-
-        // 3. 학생 목록 테이블 렌더링
+        // 2. 학생 목록 테이블 렌더링
         renderStudentTable(courseName);
     }
 
@@ -164,8 +231,8 @@
         });
     }
 
-    // 페이지 로드 시 'AI NL 5기' 기본 렌더링
-    renderStudentTable('AI NL 5기');
+    // 페이지 로드 시 'AI NLP 5기' 기본 렌더링
+    renderStudentTable('AI NLP 5기');
 
   </script>
 </body>
