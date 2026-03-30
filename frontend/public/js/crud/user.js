@@ -53,5 +53,5 @@ var UserCRUD = {
             console.error("❌ 유저 삭제 중 오류 발생:", error);
             return false;
         }
-    }
+    },
 };

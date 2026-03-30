@@ -100,14 +100,23 @@
   </div>
 
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/admin_realtime.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/admin_realtime.js"></script>
+  
   <script>
     const tbody = document.getElementById('student-table-body');
     const classToggleBtn = document.getElementById('classToggleBtn');
     let isClassStarted = false;
 
-    db.collection('settings').doc('class_status').onSnapshot((doc) => {
+    // COL_COURSES id 이후 변경 필요
+    const today = new Date().toISOString().split('T')[0];
+    db.collection(COL_COURSES).doc('AI NLP 5기')
+      .collection(COL_COURSES_TIMELINE).doc(today)
+      .onSnapshot((doc) => {
         if(doc.exists) {
-            isClassStarted = doc.data().is_class_started;
+            isClassStarted = doc.data().isStarted === true;
             if(isClassStarted) {
                 classToggleBtn.textContent = '기록 종료';
                 classToggleBtn.classList.add('started');
@@ -115,44 +124,56 @@
                 classToggleBtn.textContent = '기록 시작';
                 classToggleBtn.classList.remove('started');
             }
+        } else { // 문서가 없으면 (오늘 수업 시작 전)
+          isClassStarted = false;
+          classToggleBtn.textContent = '기록 시작';
+          classToggleBtn.classList.remove('started');
         }
     });
 
     classToggleBtn.addEventListener('click', () => {
+        const today = new Date().toISOString().split('T')[0];
         const newState = !isClassStarted;
-        db.collection('settings').doc('class_status').set({ is_class_started: newState });
+        db.collection(COL_COURSES).doc('AI NLP 5기')
+          .collection(COL_COURSES_TIMELINE).doc(today)
+          .set({ isStarted: newState }, { merge: true });
     });
 
-    db.collection('active_students').onSnapshot((snapshot) => {
+    let unsubscribe = null;
+
+    function subscribeStudents(courseId) {
+      if (unsubscribe) unsubscribe();
+      unsubscribe = RealtimeCRUD.subscribeRealtimeList(courseId, (list) => {
         tbody.innerHTML = '';
-        if(snapshot.empty) {
+        if(list.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
             return;
         }
 
         let count = 1;
-        snapshot.forEach((doc) => {
-            const data = doc.data();
+        list.forEach((student) => {
             const tr = document.createElement('tr');
             
             let statusClass = 'status-badge';
-            if (data.status === '집중') statusClass += ' status-focus';
-            if (data.status.includes('졸음')) {
+            if (student.status === '집중') statusClass += ' status-focus';
+            if (student.status && student.status.includes('졸음')) {
                 statusClass += ' status-drowsy';
                 tr.classList.add('row-drowsy');
             }
 
             tr.innerHTML = `
                 <td>${count++}</td>
-                <td style="font-weight: bold; color: #FF7710;">${data.name}</td>
-                <td>${data.course}</td>
-                <td><span class="${statusClass}">${data.status}</span></td>
-                <td style="font-weight: bold;">${data.score}</td>
+                <td style="font-weight: bold; color: #FF7710;">${student.name}</td>
+                <td>${student.course}</td>
+                <td><span class="${statusClass}">${student.status}</span></td>
+                <td style="font-weight: bold;">${student.currentScore ?? ''}</td>
                 <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
             `;
             tbody.appendChild(tr);
         });
-    });
-  </script>
+      });
+    }
+        subscribeStudents('AI NLP 5기');
+      </script>
 </body>
 </html>

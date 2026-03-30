@@ -33,6 +33,7 @@
     canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; }
     .waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; z-index: 10; transition: opacity 0.5s ease; }
     .exit-btn { background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; font-weight: bold; }
+    .exit-btn:disabled { background-color: #aaa; cursor: not-allowed; }
     
     /* 🌟 피그마 설계도: 수업 종료 화면 */
     #end-section { display: none; width: 100%; height: 50vh; justify-content: center; align-items: center; flex-direction: column; }
@@ -85,11 +86,12 @@
   <script src="/js/models/student_report.js"></script>
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/student_report.js"></script>
+  <script src="/js/crud/admin_realtime.js"></script>
   <script src="/js/ai_logic.js"></script> 
   
   <script>
     // const submitBtn = document.getElementById('submitBtn');
-    const exitBtn = document.getElementById('exitBtn');
+    // const exitBtn = document.getElementById('exitBtn');
     // const inputSection = document.getElementById('input-section');
     const webcamSection = document.getElementById('webcam-section');
     const endSection = document.getElementById('end-section');
@@ -99,11 +101,12 @@
     const canvasCtx = canvasElement.getContext('2d');
     const waitingOverlay = document.getElementById('waitingOverlay');
 
-    let myDocRef = null; 
     let isClassStarted = false; 
     let aiInterval = null; 
     let lastAnalyzeTime = Date.now(); 
 
+    let userDoc = null;
+    let realtimeStatus = null;
     let isCnnProcessing = false; 
     let cnnProbBuffer = [];      
     let isDrowsy = false;        
@@ -133,7 +136,7 @@
     const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
     faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
-    faceMesh.onResults((results) => {
+    faceMesh.onResults(async (results) => {
       canvasElement.width = videoElement.videoWidth; canvasElement.height = videoElement.videoHeight;
       canvasCtx.save(); canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       const dt = (Date.now() - lastAnalyzeTime) / 1000.0; lastAnalyzeTime = Date.now();
@@ -186,7 +189,7 @@
         minuteCount++;
       }
 
-      if (myDocRef && isClassStarted) {
+      if (realtimeStatus && isClassStarted) {
         let statusKOR = "대기중";
         if (attentionState.state === "FOCUSED") statusKOR = "집중";
         else if (attentionState.state === "PARTIAL_FOCUS") statusKOR = "집중 저하";
@@ -194,7 +197,9 @@
         else if (attentionState.state === "ABSENT") statusKOR = "자리비움";
         else if (attentionState.state === "DROWSY") statusKOR = "🚨 졸음 🚨"; 
 
-        myDocRef.update({ status: statusKOR, score: Math.round(attentionState.score) + '%', lastActive: Date.now() });
+        realtimeStatus.status = statusKOR;
+        realtimeStatus.currentScore = Math.round(attentionState.score);
+        await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
       }
       canvasCtx.restore();
     });
@@ -211,8 +216,9 @@
     auth.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = '/'; return; }
 
-      const userDoc = await UserCRUD.getUser(user.uid);
+      userDoc = await UserCRUD.getUser(user.uid); // 유저 정보
       if (!userDoc) { window.location.href = '/'; return; }
+      if (userDoc.role !== 'student') { return; } // 만약 student가 아니면 realtime 만들지 않도록 함
       displayName.textContent = userDoc.name;
       // inputSection.style.display = 'none'; 
       webcamSection.style.display = 'block';
@@ -222,8 +228,9 @@
         videoElement.srcObject = stream;
       } catch (err) { alert("웹캠 권한 허용 필수!"); return; }
 
-      myDocRef = db.collection('active_students').doc(name);
-      await myDocRef.set({ name: name, course: document.getElementById('courseName').value, status: '대기중', score: '-', warnings: 0, lastActive: Date.now() });
+      // 학생(개인) realtime (DB)
+      realtimeStatus = new Realtime(user.uid, userDoc.name, userDoc.courseName, '대기중', null, 0);
+      await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
 
       // 500ms에 한번씩 분석
       let isFaceProcessing = false;
@@ -233,16 +240,21 @@
         }
       }, 500); 
 
-      setInterval(() => { if (myDocRef) myDocRef.update({ lastActive: Date.now() }).catch(e=>{}); }, 5000);
-
-      db.collection('settings').doc('class_status').onSnapshot((doc) => {
+      const today = new Date().toISOString().split('T')[0];      
+      db.collection(COL_COURSES).doc(userDoc.courseId)
+      .collection(COL_COURSES_TIMELINE).doc(today)
+      .onSnapshot((doc) => {
         if (doc.exists) {
-          isClassStarted = doc.data().is_class_started;
+          isClassStarted = doc.data().isStarted === true;
           if (isClassStarted) {
-            waitingOverlay.style.opacity = '0'; setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
+            waitingOverlay.style.opacity = '0'; 
+            setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
           } else {
-            waitingOverlay.style.display = 'flex'; setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
-            if (myDocRef) myDocRef.update({ status: '대기중', score: '-', lastActive: Date.now() });
+            waitingOverlay.style.display = 'flex'; 
+            setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
+            realtimeStatus.status = '대기중';
+            realtimeStatus.currentScore = null;
+            RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
           }
         }
       });
@@ -254,7 +266,7 @@
         const avg = Math.round(minuteScoreSum / minuteCount);
         const today = new Date().toISOString().split('T')[0];
 
-        const isSuccess = await DailyRepository.addTempScore(name, today, avg);
+        const isSuccess = await DailyTLCRUD.addTempScore(user.uid, today, avg);
 
         if (isSuccess) {
             continuousFail = 0;
@@ -267,11 +279,10 @@
 
                 // 2. 관리자에게 피드백 (DB 상태 업데이트)
                 // model과 crud에 맞게 수정 필요
-                if (myDocRef) {
-                    myDocRef.update({ 
-                        status: "OFFLINE", 
-                        currentScore: null
-                    });
+                if (realtimeStatus) {
+                    realtimeStatus.status = "N/A";
+                    realtimeStatus.currentScore = null;
+                    await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
                 }
 
                 // 3. 리소스 정리 (분석 타이머만 정지, 화면은 유지)
@@ -296,25 +307,26 @@
       timelineInterval = setInterval(async () => {
           if (!isClassStarted) return;
           const today = new Date().toISOString().split('T')[0];
-          await DailyTLCRUD.updateToTimeline(name, today);
+          await DailyTLCRUD.updateToTimeline(user.uid, today);
       }, 600000);
 
     });
 
+    // admin에서 수업 종료
+    //   if (confirm("수업을 종료하시겠습니까? (데이터가 저장됩니다)")) {
+      // // 모든 타이머 중지
+      // if (aiInterval) clearInterval(aiInterval); // AI
+      // if (tempInterval) clearInterval(tempInterval); // 1분 저장
+      // if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
+  
+      // // 합산 변수 초기화
+      // minuteScoreSum = 0;
+      // minuteCount = 0;
+      // isClassStarted = false; // 수업 상태 꺼짐으로 변경
+      
     exitBtn.addEventListener('click', async () => {
-      if (confirm("수업을 종료하시겠습니까? (데이터가 저장됩니다)")) {
-        // 모든 타이머 중지
-        if (aiInterval) clearInterval(aiInterval); // AI
-        if (tempInterval) clearInterval(tempInterval); // 1분 저장
-        if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
-
-        // 합산 변수 초기화
-        minuteScoreSum = 0;
-        minuteCount = 0;
-        isClassStarted = false; // 수업 상태 꺼짐으로 변경
-        
         // 대기열 삭제
-        if (myDocRef) await myDocRef.delete();
+        if (realtimeStatus) await realtimeStatus.delete();
         
         // 웹캠 정지
         if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
@@ -323,12 +335,10 @@
         webcamSection.style.display = 'none';
         endSection.style.display = 'flex';
 
-        /// 리포트 자동 도출 기능 필요 (엑셀) -> 수업 종료 시 리포트 다운로드 버튼으로 변환 (테스트 완료 후 생성)
       }
-    });
+    );
 
-
-    window.addEventListener('unload', () => { if (myDocRef) myDocRef.delete(); });
+    // window.addEventListener('unload', () => { if (realtimeStatus) realtimeStatus.delete(); });
   </script>
 </body>
 </html>
