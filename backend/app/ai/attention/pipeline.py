@@ -198,9 +198,37 @@ class AttentionPipeline:
             eye_focus_score = eye_result.eye_focus_score
             eye_status_msg = eye_result.eye_status_msg
 
-            is_drowsy = self._check_cnn_state(frame, current_face_landmarks)
+            cnn_frame = frame.copy()
+
+            mp_drawing = mp.solutions.drawing_utils
+            mp_drawing_styles = mp.solutions.drawing_styles
+
+            mp_drawing.draw_landmarks(
+                image=cnn_frame,
+                landmark_list=current_face_landmarks,
+                connections=mp_face_mesh.FACEMESH_CONTOURS,
+                landmark_drawing_spec=None,
+                connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style(),
+            )
+
+            if self.refine_landmarks:
+                mp_drawing.draw_landmarks(
+                    image=cnn_frame,
+                    landmark_list=current_face_landmarks,
+                    connections=mp_face_mesh.FACEMESH_IRISES,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style(),
+                )
+
+            is_drowsy = self._check_cnn_state(cnn_frame, current_face_landmarks)
         else:
+            current_face_landmarks = None
+            pose_angles = PoseAngles()
             self.eye_focus_analyzer.reset()
+            gaze_direction = "Unknown"
+            blink_bpm = 0
+            eye_focus_score = 0.0
+            eye_status_msg = "Face Not Detected (Eye disabled)"
 
         dt = 1.0 / max(fps, 1e-6)
         try:
