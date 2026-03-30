@@ -105,6 +105,10 @@
   </div>
 
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/student_report.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/student_report.js"></script>
   
   <script>
     // 🌟 1. 현재 날짜 설정 (건우님이 테스트하신 2026년 3월 26일 기준으로 고정해서 먼저 보여줍니다!)
@@ -116,12 +120,7 @@
     const nextMonthBtn = document.getElementById('nextMonth');
 
     // 🌟 2. 달력 그리기 & 파이어베이스 데이터 연동 마법
-    async function renderCalendar() {
-      if (typeof firebaseUtils === 'undefined') {
-          alert('❌ firebase-config.js를 불러오지 못했습니다. 파일 위치를 확인해주세요!');
-          return;
-      }
-
+    async function renderCalendar(uid) {
       calendarBody.innerHTML = ''; // 기존 달력 청소
       
       const year = currentDate.getFullYear();
@@ -135,22 +134,16 @@
       // 🌟 데이터베이스에서 이번 달 하루치 데이터 싹 긁어오기! (엄청난 기능 🚀)
       let dailyDataList = {};
       try {
-          const docRef = db.collection('helmo').doc('results').collection('daily');
-          
-          // YYYYMM 형식 (예: 202603)
           const monthKey = `${year}${(month + 1).toString().padStart(2, '0')}`;
           console.log(`📡 파이어베이스에서 ${monthKey} 데이터를 긁어오는 중...`);
 
           // 효율적으로 '이번 달' 데이터만 싹 긁어옴
-          const querySnapshot = await docRef
-              .where(firebase.firestore.FieldPath.documentId(), '>=', `${monthKey}01`)
-              .where(firebase.firestore.FieldPath.documentId(), '<=', `${monthKey}${daysInMonth}`)
-              .get();
-          
-          querySnapshot.forEach(doc => {
-              // doc.id는 YYYYMMDD 형식. 날짜 숫자(DD)만 따서 저장.
-              const dayKey = parseInt(doc.id.substring(6));
-              dailyDataList[dayKey] = doc.data().result;
+          const monthlyData = await StudentReportCRUD.getMonthDailyReports(uid, year, month + 1);
+
+          Object.entries(monthlyData).forEach(([dateKey, data]) => {
+              // doc.id는 YYYY-MM-DD 형식. 날짜 숫자(DD)만 따서 저장.
+              const dayKey = parseInt(dateKey.substring(8));
+              dailyDataList[dayKey] = data.totalScore;
           });
           
           // 🚀 어제 저장한 26일 데이터 팩트체크!
@@ -182,7 +175,7 @@
         const score = dailyDataList[i]; // 오늘 자 점수가 DB에 있는가?
         let grade = '';
         if (score !== undefined) {
-          grade = firebaseUtils.calculateGrade(score); // 100점 -> A로 변환!
+          grade = StudentReportCRUD.calculateGrade(score); // 100점 -> A로 변환!
         }
 
         // 칸 내부 디자인 (날짜, 등급, 점구 표시)
@@ -202,20 +195,19 @@
       }
       
       // 3. 📊 오른쪽 요약 카드 업데이트 (어제 성공한 26일 점수 덕분에 랭킹에 잡힐 겁니다!)
-      updateSummaries(year, month);
+      updateSummaries(uid, year, month);
     }
 
     // 🌟 3. 주간/월간 요약 업데이트 마법 (어제 우리가 저장한 100점 덕분에 평균이 오를 겁니다!)
-    async function updateSummaries(year, month) {
-        if (typeof firebaseUtils === 'undefined') return;
-
+    async function updateSummaries(uid, year, month) {
         // 월간 평균 (건우님 파일 `getMonthlyData` 함수 그대로 사용!)
         console.log(`📡 파이어베이스에서 ${year}년 ${month + 1}월 평균 점수를 계산 중...`);
-        const monthlyScore = await firebaseUtils.getMonthlyData(year, month + 1);
+        const monthlyData = await StudentReportCRUD.getMonthDailyReports(uid, year, month + 1);
+        const monthlyResult = await StudentReportCRUD.calculateRangeAverage(uid, Object.keys(monthlyData));
         
-        if (monthlyScore !== null && monthlyScore !== undefined) {
-            document.getElementById('monthlyScore').textContent = `${monthlyScore}%`;
-            document.getElementById('monthlyGrade').textContent = firebaseUtils.calculateGrade(monthlyScore);
+        if (monthlyResult.count > 0) {
+            document.getElementById('monthlyScore').textContent = `${monthlyResult.score}%`;
+            document.getElementById('monthlyGrade').textContent = monthlyResult.grade;
         } else {
             document.getElementById('monthlyScore').textContent = `- %`;
             document.getElementById('monthlyGrade').textContent = `-`;
@@ -232,11 +224,18 @@
         const formatForWeekly = (date) => `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
         
         console.log(`📡 파이어베이스에서 이번 주(${formatForWeekly(weekStartDate)} ~ ${formatForWeekly(weekEndDate)}) 평균 점수를 계산 중...`);
-        const weeklyScore = await firebaseUtils.getWeeklyData(formatForWeekly(weekStartDate), formatForWeekly(weekEndDate));
+
+        const weekDates = [];
+        const weekCursor = new Date(weekStartDate);
+        while (weekCursor <= weekEndDate) {
+            weekDates.push(formatForWeekly(new Date(weekCursor)));
+            weekCursor.setDate(weekCursor.getDate() + 1);
+        }
+        const weeklyResult = await StudentReportCRUD.calculateRangeAverage(uid, weekDates);
         
-        if (weeklyScore !== null && weeklyScore !== undefined) {
-            document.getElementById('weeklyScore').textContent = `${weeklyScore}%`;
-            document.getElementById('weeklyGrade').textContent = firebaseUtils.calculateGrade(weeklyScore);
+        if (weeklyResult.count > 0) {
+            document.getElementById('weeklyScore').textContent = `${weeklyResult.score}%`;
+            document.getElementById('weeklyGrade').textContent = weeklyResult.grade;
         } else {
             document.getElementById('weeklyScore').textContent = `- %`;
             document.getElementById('weeklyGrade').textContent = `-`;
@@ -246,16 +245,21 @@
     // 버튼 이벤트
     prevMonthBtn.addEventListener('click', () => {
       currentDate.setMonth(currentDate.getMonth() - 1);
-      renderCalendar();
+      renderCalendar(currentUid);
     });
 
     nextMonthBtn.addEventListener('click', () => {
       currentDate.setMonth(currentDate.getMonth() + 1);
-      renderCalendar();
+      renderCalendar(currentUid);
     });
 
     // 🌟 대망의 첫 달력 그리기! (어제 성공의 달콤한 열매를 맛볼 시간입니다 🍒)
-    renderCalendar();
+    let currentUid = null;
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { window.location.href = '/'; return; }
+      currentUid = user.uid;
+      renderCalendar(currentUid);
+    });
 
   </script>
 </body>

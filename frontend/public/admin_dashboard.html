@@ -56,7 +56,7 @@
     @keyframes blink { 50% { opacity: 0.5; } }
   </style>
 </head>
-<body>
+<body style="display:none;">
 
   <header>
     <div class="logo-area">
@@ -70,13 +70,14 @@
     <div class="sidebar">
       <a href="/admin_dashboard.html" class="menu-item active">수업 모니터링</a>
       <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
+      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
       <a href="/course_manage.html" class="menu-item">과정 관리</a>
     </div>  
 
     <div class="main-content">
       <div class="top-controls">
         <select class="course-select">
-          <option>AI NL 5기</option>
+          <option>AI NLP 5기</option>
         </select>
         <button class="class-toggle-btn" id="classToggleBtn">수업 시작</button>
       </div>
@@ -99,59 +100,104 @@
   </div>
 
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/admin_realtime.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/admin_realtime.js"></script>
+  
   <script>
-    const tbody = document.getElementById('student-table-body');
-    const classToggleBtn = document.getElementById('classToggleBtn');
-    let isClassStarted = false;
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { window.location.href = '/'; return; }
+      
+      const userDoc = await UserCRUD.getUser(user.uid);
+      if (!userDoc || userDoc.role !== 'admin') { window.location.href = '/'; return; }
 
-    db.collection('settings').doc('class_status').onSnapshot((doc) => {
-        if(doc.exists) {
-            isClassStarted = doc.data().is_class_started;
-            if(isClassStarted) {
-                classToggleBtn.textContent = '기록 종료';
-                classToggleBtn.classList.add('started');
-            } else {
-                classToggleBtn.textContent = '기록 시작';
-                classToggleBtn.classList.remove('started');
-            }
-        }
-    });
+      document.body.style.display = 'block';
 
-    classToggleBtn.addEventListener('click', () => {
-        const newState = !isClassStarted;
-        db.collection('settings').doc('class_status').set({ is_class_started: newState });
-    });
+      const today = new Date().toISOString().split('T')[0];
+      const tbody = document.getElementById('student-table-body');
+      const classToggleBtn = document.getElementById('classToggleBtn');
+      let isClassStarted = false;
+      const courseId = userDoc.courseId;
 
-    db.collection('active_students').onSnapshot((snapshot) => {
-        tbody.innerHTML = '';
-        if(snapshot.empty) {
-            tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
-            return;
-        }
+      // stale 레코드 정리 (전날 생성된 realtime 삭제)
+      const realtimeSnapshot = await db
+          .collection(COL_COURSES)
+          .doc(courseId)
+          .collection('realtime')
+          .get();
 
-        let count = 1;
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            const tr = document.createElement('tr');
-            
-            let statusClass = 'status-badge';
-            if (data.status === '집중') statusClass += ' status-focus';
-            if (data.status.includes('졸음')) {
-                statusClass += ' status-drowsy';
-                tr.classList.add('row-drowsy');
-            }
+      realtimeSnapshot.docs.forEach(async (doc) => {
+          const lastUpdated = doc.data().lastUpdated?.toDate();
+          if (!lastUpdated) return;
+          const lastDate = lastUpdated.toISOString().split('T')[0];
+          if (lastDate < today) {
+              await RealtimeCRUD.deleteStatus(courseId, doc.id);
+          }
+      });
 
-            tr.innerHTML = `
-                <td>${count++}</td>
-                <td style="font-weight: bold; color: #FF7710;">${data.name}</td>
-                <td>${data.course}</td>
-                <td><span class="${statusClass}">${data.status}</span></td>
-                <td style="font-weight: bold;">${data.score}</td>
-                <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
-            `;
-            tbody.appendChild(tr);
+      db.collection(COL_COURSES).doc(courseId)
+        .collection(COL_COURSES_TIMELINE).doc(today)
+        .onSnapshot((doc) => {
+          if (doc.exists) {
+              isClassStarted = doc.data().isStarted === true;
+              if (isClassStarted) {
+                  classToggleBtn.textContent = '기록 종료';
+                  classToggleBtn.classList.add('started');
+              } else {
+                  classToggleBtn.textContent = '기록 시작';
+                  classToggleBtn.classList.remove('started');
+              }
+          } else {
+              isClassStarted = false;
+              classToggleBtn.textContent = '기록 시작';
+              classToggleBtn.classList.remove('started');
+          }
+      });
+      classToggleBtn.addEventListener('click', () => {
+          const today = new Date().toISOString().split('T')[0];
+          const newState = !isClassStarted;
+          db.collection(COL_COURSES).doc(courseId)
+            .collection(COL_COURSES_TIMELINE).doc(today)
+            .set({ isStarted: newState }, { merge: true });
+      });
+  
+      let unsubscribe = null;
+  
+      function subscribeStudents(courseId) {
+        if (unsubscribe) unsubscribe();
+        unsubscribe = RealtimeCRUD.subscribeRealtimeList(courseId, (list) => {
+          tbody.innerHTML = '';
+          if(list.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
+              return;
+          }
+  
+          let count = 1;
+          list.forEach((student) => {
+              const tr = document.createElement('tr');
+              
+              let statusClass = 'status-badge';
+              if (student.status === '집중') statusClass += ' status-focus';
+              if (student.status && student.status.includes('졸음')) {
+                  statusClass += ' status-drowsy';
+                  tr.classList.add('row-drowsy');
+              }
+  
+              tr.innerHTML = `
+                  <td>${count++}</td>
+                  <td style="font-weight: bold; color: #FF7710;">${student.name}</td>
+                  <td>${student.course}</td>
+                  <td><span class="${statusClass}">${student.status}</span></td>
+                  <td style="font-weight: bold;">${student.currentScore ?? ''}</td>
+                  <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
+              `;
+              tbody.appendChild(tr);
+          });
         });
+      }
+        subscribeStudents(courseId);
     });
-  </script>
+      </script>
 </body>
 </html>

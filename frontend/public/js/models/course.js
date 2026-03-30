@@ -4,24 +4,33 @@
 // 과정 목록
 class Course {
     constructor(courseId, courseName, instructor, isActive = true, createdAt = null){
-        this.courseId = courseId;
+        // 수정 불가
+        this._courseId = courseId;
+        this._createdAt = createdAt;
+        // 수정 가능
         this.courseName = courseName;
         this.instructor = instructor;
         this.isActive = isActive;
-        this.createdAt = createdAt;
     } 
+
+    //getter
+    get courseId() {return this._courseId;}
+    get createdAt() {return this._createdAt;}
 }
 
 // 수업별 타임라인
 class CourseTimeline {
-    constructor(date, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
-        this.date = date;
+    constructor(date, isStarted, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
+        this._date = date;
+
+        this.isStarted = isStarted;
         this.avgScore = avgScore;
         this.maxScore = maxScore;
         this.minScore = minScore;
         this.timelineScore = timelineScore;
         this.studentCount = studentCount;
     } 
+    get date() { return this._date; }
 }
 
 // 2) Converters
@@ -53,6 +62,7 @@ const courseTLConverter = {
     const data = snapshot.data(options);
     return new CourseTimeline(
       snapshot.id, 
+      data.isStarted ?? true,
       data.avgScore || 0,
       data.maxScore || 0,
       data.minScore || 0,
@@ -64,6 +74,7 @@ const courseTLConverter = {
   toFirestore: (courseTL) => { 
     return { 
       // date
+      isStarted: courseTL.isStarted,
       avgScore: courseTL.avgScore,
       maxScore: courseTL.maxScore,
       minScore: courseTL.minScore,

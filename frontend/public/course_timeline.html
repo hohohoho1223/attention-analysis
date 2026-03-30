@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>상세 분석 결과 - 멋쟁이사자처럼</title>
+  <title>수업별 타임라인 - 멋쟁이사자처럼</title>
   
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -40,12 +40,23 @@
 <body style="display:none;">
 
   <header>
-    <a href="/month_result.html" class="back-btn">< 달력으로 돌아가기</a>
+    <a href="/admin_dashboard.html" class="back-btn">< 대시보드로 돌아가기</a>
     <div class="logo-text">멋쟁이사자처럼</div>
   </header>
 
   <div class="container">
-    <div class="page-title" id="pageTitle">202X년 X월 X일 상세 분석</div>
+    
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <div class="page-title" id="pageTitle">수업별 타임라인</div>
+        <div style="display: flex; gap: 10px;">
+            <select id="coursePicker">
+                <option value="ai_nlp_5">AI NLP 5기</option>
+                <option value="ai_cv_4">AI CV 4기</option>
+                <option value="frontend">프론트엔드</option>
+            </select>
+            <input type="date" id="datePicker">
+        </div>
+    </div>
 
     <div class="stats-container">
       <div class="stat-card">
@@ -67,12 +78,17 @@
         <div class="chart-title">🕒 수업 시간별 집중도 변화</div>
       </div>
       <div class="chart-wrapper">
+        <div id="noDataMsg" style="display:none; text-align:center; padding: 40px; color: #999;">
+            선택한 날짜의 데이터가 없습니다.
+        </div>
         <canvas id="focusTimelineChart"></canvas>
       </div>
     </div>
   </div>
 
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/crud/user.js"></script>
   
   <script>
     auth.onAuthStateChanged(async (user) => {
@@ -85,21 +101,31 @@
 
       // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
       const urlParams = new URLSearchParams(window.location.search);
-      const targetDate = urlParams.get('date');
-      
-      if (!targetDate) {
-          alert("잘못된 접근입니다. 달력에서 날짜를 선택해주세요.");
-          window.location.href = '/month_result.html';
-      }
+      const today = new Date().toISOString().split('T')[0];
+      const targetDate = urlParams.get('date') || today;
   
-      // 제목 업데이트
-      const dateParts = targetDate.split('-'); // [2026, 03, 26]
-      document.getElementById('pageTitle').textContent = `${dateParts[0]}년 ${parseInt(dateParts[1])}월 ${parseInt(dateParts[2])}일 상세 분석`;
+      const datePicker = document.getElementById('datePicker');
+      const coursePicker = document.getElementById('coursePicker');
+      
+      datePicker.value = today;
+  
+      coursePicker.addEventListener('change', () => {
+          loadDetailData(coursePicker.value, datePicker.value);
+      });
+  
+      datePicker.addEventListener('change', () => {
+          loadDetailData(coursePicker.value, datePicker.value);
+      });
+  
+      loadDetailData(coursePicker.value, datePicker.value);
   
       // 🌟 [임시 로직] 현재 DB에는 '하루치 평균 점수 1개'만 저장되어 있습니다.
       // 피그마처럼 출렁이는 타임라인 그래프를 그리기 위해, 평균 점수를 바탕으로 가상의 타임라인 배열을 생성합니다.
       // (추후 student_dashboard에서 분당 점수 배열을 DB에 통째로 저장하도록 업그레이드하면 완벽해집니다!)
-      async function loadDetailData() {
+      async function loadDetailData(courseId, date) {
+          const dateParts = date.split('-');
+          document.getElementById('pageTitle').textContent = `수업별 타임라인 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
+  
           if (typeof db === 'undefined') return;
   
           const docId = targetDate.replace(/-/g, ''); 
@@ -110,11 +136,17 @@
           let realTimeline = []; // 🌟 DB에서 가져올 진짜 배열
   
           if (docSnap.exists) {
+              document.getElementById('noDataMsg').style.display = 'none';
+               document.getElementById('focusTimelineChart').style.display = 'block';
               const data = docSnap.data();
               realAvgScore = data.result || 0;
               realTimeline = data.timeline || []; // 배열 가져오기!
           } else {
-              document.getElementById('pageTitle').textContent += " (데이터 없음)";
+              document.getElementById('avgScore').textContent = `- %`;
+              document.getElementById('maxScore').textContent = `- %`;
+              document.getElementById('minScore').textContent = `- %`;
+              document.getElementById('noDataMsg').style.display = 'block';
+              document.getElementById('focusTimelineChart').style.display = 'none'; // 차트 숨기기
               return;
           }
   
@@ -172,9 +204,6 @@
               }
           });
       }
-  
-      // 로딩 즉시 실행!
-      loadDetailData();
     });
 
   </script>

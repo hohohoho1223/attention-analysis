@@ -1,30 +1,35 @@
-// DB - courses/daily/realtime
+// DB - courses/{courseId}/realtime/{uid}
 
 // 1) model
 // 수업 모니터링용
-class RealtimeStatus {
+class Realtime {
     constructor(uid, name, course, status, currentScore, absentCount, lastUpdated = null){
-        this.uid = uid;
-        this.name = name;
-        this.course = course;
-        this.status = status;
-        this.currentScore = currentScore;
-        this.absentCount = absentCount;
-        this.lastUpdated = lastUpdated;
+      // 수정 불가  
+      this._uid = uid;
+      this._name = name;
+      this._course = course;
+
+      this.status = status;
+      this.currentScore = currentScore;
+      this.absentCount = absentCount;
+      this.lastUpdated = lastUpdated;
     } 
+    get uid() {return this._uid;}
+    get name() { return this._name; }
+    get course() { return this._course; }
 }
 
 // 2) converter
 const realtimeConverter = {
   fromFirestore: (snapshot, options)=>{
     const data = snapshot.data(options); 
-    return new RealtimeStatus(
+    return new Realtime(
       snapshot.id, // uid
       data.name,
       data.course,
       data.status || "N/A",
-      data.currentScore || 0,
-      data.absentCount || 0,
+      data.currentScore ?? null,
+      data.absentCount ?? 0,
       data.lastUpdated,
     );
   },

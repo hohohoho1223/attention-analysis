@@ -30,11 +30,19 @@
       transition: background 0.2s;
     }
     .google-btn:hover { background-color: #f1f1f1; }
+    
+    #input-section { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px; z-index: 10; position: relative;}
+    .input-group { margin-bottom: 20px; text-align: left; }
+    .input-group label { display: block; font-size: 13px; color: #555; margin-bottom: 8px; }
+    .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+    .submit-btn { width: 100%; padding: 12px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .submit-btn:hover { background-color: #e66a00; }
+    
   </style>
 </head>
 <body>
 
-  <div class="login-container">
+  <div class="login-container" id="login-section">
     <div class="logo-text">멋쟁이사자처럼</div>
     <div class="sub-text">학습 집중도 분석 시스템</div>
     
@@ -44,25 +52,51 @@
     </button>
   </div>
 
+    <div class="login-container" id="input-section" style="display:none;">
+      <div class="input-group">
+        <label>이름</label>
+        <input type="text" id="studentName" placeholder="홍길동">
+      </div>
+      <div class="input-group">
+        <label>과정명</label>
+        <select id="courseName">
+          <option value="AI NLP 5기">AI NLP 5기</option>
+          <option value="AI CV 4기">AI CV 4기</option>
+          <option value="프론트엔드 3기">프론트엔드 3기</option>
+        </select>
+      </div>
+      <button class="submit-btn" id="submitBtn">수업 입장하기</button>
+    </div>
+
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/crud/user.js"></script>
   
   <script>
+    const submitBtn = document.getElementById('submitBtn');
+    const loginSection = document.getElementById('login-section');
+    const inputSection = document.getElementById('input-section'); // 학생일 시 이름/과정명 입력
+    let currentUser = null; // user 저장용
+
     // 🌟 로그인 및 관리자/학생 권한 분기 로직
     document.getElementById('googleLoginBtn').addEventListener('click', () => {
       auth.signInWithPopup(googleProvider)
-        .then((result) => {
-          const user = result.user;
-          console.log("로그인 성공:", user.email);
-          
-          // 🚨 관리자 이메일을 여기에 하드코딩해둡니다 (추후 DB 연동 가능)
-          const adminEmails = ['slee9219@gmail.com', 'admin@mutsa.com', 'wonho1820@gmail.com']; 
-          
-          if (adminEmails.includes(user.email)) {
-            alert(`관리자 ${user.displayName}님 환영합니다.`);
-            window.location.href = '/admin_dashboard.html'; // 관리자 페이지로 이동 (나중에 만들 예정)
+        .then(async (result) => {
+          currentUser = result.user;
+          console.log("로그인 성공:", currentUser.email);
+
+          const userDoc = await UserCRUD.getUser(currentUser.uid);
+          console.log("userDoc:", userDoc); // ← CRUD 작동 확인용
+
+          if (!userDoc) {
+            loginSection.style.display = 'none';
+            inputSection.style.display = 'block';
+          } else if (userDoc.role === 'admin') {
+            // 알림창 없이 조용히 관리자 페이지로 이동
+            window.location.href = '/admin_dashboard.html';
           } else {
-            alert(`학생 ${user.displayName}님 환영합니다.`);
-            window.location.href = '/student_dashboard.html'; // 아까 이름 바꾼 달력 페이지로 이동!
+            // 알림창 없이 조용히 학생 페이지로 이동
+            window.location.href = '/student_dashboard.html';
           }
         })
         .catch((error) => {
@@ -70,6 +104,27 @@
           alert("구글 로그인에 실패했습니다.");
         });
     });
+
+    // submitBtn 로직
+    submitBtn.addEventListener('click', async () => {
+      console.log("submitBtn 클릭됨");
+      const name = document.getElementById('studentName').value.trim();
+      const courseSelect = document.getElementById('courseName');
+      const courseId = courseSelect.value;
+      const courseName = courseSelect.options[courseSelect.selectedIndex].textContent;
+
+      if (!name) { alert('이름을 입력해주세요!'); return; }
+
+      const newUser = new User(currentUser.uid, currentUser.email, name, courseId, courseName, 'student');
+      const success = await UserCRUD.createUser(newUser);
+      console.log("createUser 결과:", success);
+
+      if (success) {
+        window.location.href = '/student_dashboard.html';
+      } else {
+        alert("저장에 실패했습니다. 다시 시도해주세요.");
+      }
+      });
   </script>
 </body>
 </html>

@@ -19,12 +19,12 @@
     .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
     .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
     
-    #input-section { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px; z-index: 10; position: relative;}
+    /* #input-section { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px; z-index: 10; position: relative;}
     .input-group { margin-bottom: 20px; text-align: left; }
     .input-group label { display: block; font-size: 13px; color: #555; margin-bottom: 8px; }
     .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
     .submit-btn { width: 100%; padding: 12px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-    .submit-btn:hover { background-color: #e66a00; }
+    .submit-btn:hover { background-color: #e66a00; } */
     
     #webcam-section { display: none; width: 80%; max-width: 800px; text-align: center; }
     .welcome-msg { font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #333; display: flex; justify-content: center; align-items: center; gap: 15px; }
@@ -33,6 +33,7 @@
     canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; }
     .waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; z-index: 10; transition: opacity 0.5s ease; }
     .exit-btn { background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; font-weight: bold; }
+    .exit-btn:disabled { background-color: #aaa; cursor: not-allowed; }
     
     /* 🌟 피그마 설계도: 수업 종료 화면 */
     #end-section { display: none; width: 100%; height: 50vh; justify-content: center; align-items: center; flex-direction: column; }
@@ -46,7 +47,7 @@
     <div class="sub-text">AI NLP 5기 과정 - 학습 집중도 분석 시스템</div>
   </header>
 
-  <div id="input-section">
+  <!-- <div id="input-section">
     <div class="input-group">
       <label>이름</label>
       <input type="text" id="studentName" placeholder="홍길동">
@@ -60,7 +61,7 @@
       </select>
     </div>
     <button class="submit-btn" id="submitBtn">수업 입장하기</button>
-  </div>
+  </div> -->
 
   <div id="webcam-section">
     <div class="welcome-msg">
@@ -80,12 +81,19 @@
   </div>
 
   <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/admin_realtime.js"></script>
+  <script src="/js/models/student_report.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/student_report.js"></script>
+  <script src="/js/crud/admin_realtime.js"></script>
   <script src="/js/ai_logic.js"></script> 
   
   <script>
-    const submitBtn = document.getElementById('submitBtn');
-    const exitBtn = document.getElementById('exitBtn');
-    const inputSection = document.getElementById('input-section');
+
+    // const submitBtn = document.getElementById('submitBtn');
+    // const exitBtn = document.getElementById('exitBtn');
+    // const inputSection = document.getElementById('input-section');
     const webcamSection = document.getElementById('webcam-section');
     const endSection = document.getElementById('end-section');
     const displayName = document.getElementById('display-name');
@@ -94,15 +102,17 @@
     const canvasCtx = canvasElement.getContext('2d');
     const waitingOverlay = document.getElementById('waitingOverlay');
 
-    let myDocRef = null; 
+    let currentUser = null;
     let isClassStarted = false; 
     let aiInterval = null; 
     let lastAnalyzeTime = Date.now(); 
 
+    let userDoc = null;
+    let realtimeStatus = null;
     let isCnnProcessing = false; 
     let cnnProbBuffer = [];      
     let isDrowsy = false;        
-    let sessionScores = []; // 🌟 일별 평균을 위한 배열
+    // sessionScore 삭제
 
     function getCropBase64(video, landmarks, indices, pad, width, height) {
         let xs = indices.map(i => landmarks[i].x * width);
@@ -128,7 +138,7 @@
     const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
     faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
-    faceMesh.onResults((results) => {
+    faceMesh.onResults(async (results) => {
       canvasElement.width = videoElement.videoWidth; canvasElement.height = videoElement.videoHeight;
       canvasCtx.save(); canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       const dt = (Date.now() - lastAnalyzeTime) / 1000.0; lastAnalyzeTime = Date.now();
@@ -173,10 +183,15 @@
         }
       }
 
+      // AI 분석 결과 도출 시
       const attentionState = attentionAnalyzer.update(poseAngles, 0.0, faceDetected, dt, eyeResult, isDrowsy);
-      if (isClassStarted && !isNaN(attentionState.score)) { sessionScores.push(attentionState.score); }
+      if (isClassStarted && !isNaN(attentionState.score)) { 
+        // 1분 합산용 변수에 기록
+        minuteScoreSum += attentionState.score;
+        minuteCount++;
+      }
 
-      if (myDocRef && isClassStarted) {
+      if (realtimeStatus && isClassStarted) {
         let statusKOR = "대기중";
         if (attentionState.state === "FOCUSED") statusKOR = "집중";
         else if (attentionState.state === "PARTIAL_FOCUS") statusKOR = "집중 저하";
@@ -184,25 +199,51 @@
         else if (attentionState.state === "ABSENT") statusKOR = "자리비움";
         else if (attentionState.state === "DROWSY") statusKOR = "🚨 졸음 🚨"; 
 
-        myDocRef.update({ status: statusKOR, score: Math.round(attentionState.score) + '%', lastActive: Date.now() });
+        realtimeStatus.status = statusKOR;
+        realtimeStatus.currentScore = Math.round(attentionState.score);
+        await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
       }
       canvasCtx.restore();
     });
+        
 
-    submitBtn.addEventListener('click', async () => {
-      const name = document.getElementById('studentName').value;
-      if (!name) { alert('이름을 입력해주세요!'); return; }
-      displayName.textContent = name;
-      inputSection.style.display = 'none'; webcamSection.style.display = 'block';
+    // 임시저장(1분) 및 타임라인(10분)
+    let tempInterval = null; // 1분
+    let timelineInterval = null; // 10분
+    
+    // 1분 단위 저장용 변수
+    let minuteScoreSum = 0; // 1분 동안 점수 합계
+    let minuteCount = 0; // 1분 동안 쌓인 데이터 개수
+    let continuousFail = 0; // 연속 저장 실패 횟수
+
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { window.location.href = '/'; return; }
+
+      userDoc = await UserCRUD.getUser(user.uid); // 유저 정보
+      if (!userDoc) { 
+        window.location.href = '/'; 
+        return; 
+      }
+      if (userDoc.role !== 'student') {  // 만약 student가 아니면 realtime 만들지 않도록 함
+        window.location.href = '/admin_dashboard.html'; 
+        return; 
+      }
+      displayName.textContent = userDoc.name;
+      // inputSection.style.display = 'none'; 
+      webcamSection.style.display = 'block';
+
+      currentUser = user;
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         videoElement.srcObject = stream;
       } catch (err) { alert("웹캠 권한 허용 필수!"); return; }
 
-      myDocRef = db.collection('active_students').doc(name);
-      await myDocRef.set({ name: name, course: document.getElementById('courseName').value, status: '대기중', score: '-', warnings: 0, lastActive: Date.now() });
+      // 학생(개인) realtime (DB)
+      realtimeStatus = new Realtime(user.uid, userDoc.name, userDoc.courseName, '대기중', null, 0);
+      await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
 
+      // 500ms에 한번씩 분석
       let isFaceProcessing = false;
       aiInterval = setInterval(async () => {
         if (videoElement.readyState >= 2 && isClassStarted && !isFaceProcessing) {
@@ -210,61 +251,116 @@
         }
       }, 500); 
 
-      setInterval(() => { if (myDocRef) myDocRef.update({ lastActive: Date.now() }).catch(e=>{}); }, 5000);
-
-      db.collection('settings').doc('class_status').onSnapshot((doc) => {
+      const today = new Date().toISOString().split('T')[0];      
+      db.collection(COL_COURSES).doc(userDoc.courseId)
+      .collection(COL_COURSES_TIMELINE).doc(today)
+      .onSnapshot((doc) => {
         if (doc.exists) {
-          isClassStarted = doc.data().is_class_started;
+          isClassStarted = doc.data().isStarted === true;
           if (isClassStarted) {
-            waitingOverlay.style.opacity = '0'; setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
+            waitingOverlay.style.opacity = '0'; 
+            setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
           } else {
-            waitingOverlay.style.display = 'flex'; setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
-            if (myDocRef) myDocRef.update({ status: '대기중', score: '-', lastActive: Date.now() });
+            waitingOverlay.style.display = 'flex'; 
+            setTimeout(() => { waitingOverlay.style.opacity = '1'; }, 10);
+            realtimeStatus.status = '대기중';
+            realtimeStatus.currentScore = null;
+            RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
           }
         }
       });
+
+      // 1분 타이머(임시저장)
+      tempInterval = setInterval(async () => {
+        if (!isClassStarted || minuteCount === 0) return;
+
+        const avg = Math.round(minuteScoreSum / minuteCount);
+        const today = new Date().toISOString().split('T')[0];
+
+        const isSuccess = await DailyTLCRUD.addTempScore(user.uid, today, avg);
+
+        if (isSuccess) {
+            continuousFail = 0;
+        } else {
+            continuousFail++;
+            if (continuousFail >= 3) { // 3분 이상 저장 실패 시
+
+                // 1. 학생 페이지 알림
+                alert("네트워크 연결이 불안정합니다. 인터넷 연결을 확인해주세요.");
+
+                // 2. 관리자에게 피드백 (DB 상태 업데이트)
+                // model과 crud에 맞게 수정 필요
+                if (realtimeStatus) {
+                    realtimeStatus.status = "N/A";
+                    realtimeStatus.currentScore = null;
+                    await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+                }
+
+                // 3. 리소스 정리 (분석 타이머만 정지, 화면은 유지)
+                clearInterval(tempInterval); // 1분 저장 정지
+                clearInterval(timelineInterval); // 10분 저장 정지
+                clearInterval(aiInterval);   // AI 분석 정지
+                
+                // 4. 시각적 피드백 (웨이팅 오버레이 활용)
+                waitingOverlay.style.display = 'flex';
+                waitingOverlay.style.opacity = '1';
+                waitingOverlay.textContent = "네트워크 오류로 분석이 중단되었습니다. 새로고침이 필요합니다. 🔌";
+                }
+        }
+
+        // 리셋 (실패 시에는 1분 누락)
+        minuteScoreSum = 0;
+        minuteCount = 0;
+
+      }, 60000);
+
+      // 10분 타이머(타임라인)
+      timelineInterval = setInterval(async () => {
+          if (!isClassStarted) return;
+          const today = new Date().toISOString().split('T')[0];
+          await DailyTLCRUD.updateToTimeline(user.uid, today);
+      }, 600000);
+
     });
 
+    // admin에서 수업 종료
+    //   if (confirm("수업을 종료하시겠습니까? (데이터가 저장됩니다)")) {
+      // // 모든 타이머 중지
+      // if (aiInterval) clearInterval(aiInterval); // AI
+      // if (tempInterval) clearInterval(tempInterval); // 1분 저장
+      // if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
+  
+      // // 합산 변수 초기화
+      // minuteScoreSum = 0;
+      // minuteCount = 0;
+      // isClassStarted = false; // 수업 상태 꺼짐으로 변경
+
+    // 브라우저 창을 닫으면 realtime 삭제
+    window.addEventListener('beforeunload', () => {
+        if (realtimeStatus && userDoc && currentUser) {
+            db.collection(COL_COURSES).doc(userDoc.courseId)
+              .collection('realtime').doc(currentUser.uid)
+              .delete();
+        }
+    });
+
+      
+    // 삭제 예정
     exitBtn.addEventListener('click', async () => {
-      if (confirm("수업을 종료하시겠습니까? (데이터가 저장됩니다)")) {
-        let finalAverageScore = 0;
-        let timelineData = []; // 🌟 진짜 타임라인 배열!
-
-        if (sessionScores.length > 0) {
-            // 1. 전체 평균 점수
-            finalAverageScore = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-            
-            // 2. 타임라인용 데이터 압축 (수백 개를 20개 구간으로 묶어서 평균 냄)
-            const bucketSize = Math.max(1, Math.ceil(sessionScores.length / 20));
-            for(let i=0; i<sessionScores.length; i+=bucketSize) {
-                const chunk = sessionScores.slice(i, i+bucketSize);
-                const avg = Math.round(chunk.reduce((a,b)=>a+b,0)/chunk.length);
-                timelineData.push(avg);
-            }
-        }
+        // 대기열 삭제
+        if (realtimeStatus) await realtimeStatus.delete();
         
-        const today = new Date();
-        const dateString = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
-        
-        if (typeof db !== 'undefined' && finalAverageScore > 0) {
-            // 🌟 기존 firebaseUtils 대신 직접 DB에 평균 점수 + 타임라인 배열 동시 저장!
-            const docId = dateString.replace(/-/g, ''); // 예: 20260326
-            await db.collection('helmo').doc('results').collection('daily').doc(docId).set({
-                result: finalAverageScore,
-                timeline: timelineData  // 찐 데이터 탑재 완로!
-            }, { merge: true });
-        }
-
-        if (aiInterval) clearInterval(aiInterval);
-        if (myDocRef) await myDocRef.delete();
-        
+        // 웹캠 정지
         if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
+        
+        // 화면 전환
         webcamSection.style.display = 'none';
-        endSection.style.display = 'flex';
-      }
+        endSection.style.display = 'flex'
+
     });
 
-    window.addEventListener('unload', () => { if (myDocRef) myDocRef.delete(); });
+    // window.addEventListener('unload', () => { if (realtimeStatus) realtimeStatus.delete(); });
+  
   </script>
 </body>
 </html>
