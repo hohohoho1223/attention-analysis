@@ -135,6 +135,7 @@
 
       // 드롭다운 변경 시 해당 과정으로 전환
       courseSelect.addEventListener('change', () => {
+        subscribeBoard(courseSelect.value);
         subscribeStudents(courseSelect.value);
       });
 
@@ -154,24 +155,49 @@
           }
       });
 
-      db.collection(COL_COURSES).doc(courseId)
-        .collection(COL_COURSES_TIMELINE).doc(today)
-        .onSnapshot((doc) => {
-          if (doc.exists) {
+      // 모니터링 보드 상태
+      function subscribeBoard(targetCourseId) {
+        if (unsubscribeBoard) unsubscribeBoard();
+        unsubscribeBoard = db.collection(COL_COURSES).doc(targetCourseId)
+          .collection(COL_COURSES_TIMELINE).doc(today)
+          .onSnapshot((doc) => {
+            if (doc.exists) {
               isClassStarted = doc.data().isStarted === true;
               if (isClassStarted) {
-                  classToggleBtn.textContent = '기록 종료';
-                  classToggleBtn.classList.add('started');
+                classToggleBtn.textContent = '기록 종료';
+                classToggleBtn.classList.add('started');
               } else {
-                  classToggleBtn.textContent = '기록 시작';
-                  classToggleBtn.classList.remove('started');
+                classToggleBtn.textContent = '기록 시작';
+                classToggleBtn.classList.remove('started');
               }
-          } else {
+            } else {
               isClassStarted = false;
               classToggleBtn.textContent = '기록 시작';
               classToggleBtn.classList.remove('started');
-          }
-      });
+            }
+          });
+      }
+      
+      // 임시 코드 주석(이후 삭제 예정)
+      // db.collection(COL_COURSES).doc(courseId)
+      //   .collection(COL_COURSES_TIMELINE).doc(today)
+      //   .onSnapshot((doc) => {
+      //     if (doc.exists) {
+      //         isClassStarted = doc.data().isStarted === true;
+      //         if (isClassStarted) {
+      //             classToggleBtn.textContent = '기록 종료';
+      //             classToggleBtn.classList.add('started');
+      //         } else {
+      //             classToggleBtn.textContent = '기록 시작';
+      //             classToggleBtn.classList.remove('started');
+      //         }
+      //     } else {
+      //         isClassStarted = false;
+      //         classToggleBtn.textContent = '기록 시작';
+      //         classToggleBtn.classList.remove('started');
+      //     }
+      // });
+
       classToggleBtn.addEventListener('click', () => {
           const today = new Date().toISOString().split('T')[0];
           const newState = !isClassStarted;
@@ -184,6 +210,7 @@
             .catch(err => console.error('[ADMIN] timeline set fail:', err));
       });
   
+      let unsubscribeBoard = null;
       let unsubscribe = null;
   
       function subscribeStudents(courseId) {
@@ -218,7 +245,8 @@
           });
         });
       }
-        subscribeStudents(courseId);
+        subscribeBoard(courseSelect.value);
+        subscribeStudents(courseSelect.value);
     });
       </script>
 </body>
