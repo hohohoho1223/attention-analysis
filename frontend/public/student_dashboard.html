@@ -42,7 +42,7 @@
   <div id="webcam-section">
     <div class="welcome-msg">
       🦁 <span id="display-name"></span>님 환영합니다!
-      <button class="exit-btn" id="exitBtn">수업 나가기</button>
+      <!-- <button class="exit-btn" id="exitBtn">수업 나가기</button> -->
     </div>
     <div class="video-container">
       <video id="webcam" autoplay playsinline muted></video>
@@ -91,11 +91,14 @@
     let userDoc = null;
     let realtimeStatus = null;
     let sessionScores = [];
-    let continuousFail = 0;
-    let tempInterval = null;
-    let timelineInterval = null;
-    let minuteScoreSum = 0;
-    let minuteCount = 0;
+    let continuousFail = 0; // 연속 저장 실패 횟수
+
+    // 임시저장(1분) 및 타임라인(10분)
+    let tempInterval = null; // 1분
+    let timelineInterval = null // 10분
+
+    let minuteScoreSum = 0; // 1분 동안의 점수 합산
+    let minuteCount = 0; // 1분 동안의 점수 개수
     let latestAttentionState = new RemoteAttentionState();
     let isRemoteAnalyzing = false;
 
@@ -176,17 +179,23 @@
         else if (attentionState.state === 'ABSENT') statusKOR = '자리비움';
         else if (attentionState.state === 'DROWSY') statusKOR = '🚨 졸음 🚨';
 
+        // 순간 점수 대신 버퍼 평균으로 스무딩
         const displayScore = sessionScores.length > 0
           ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length)
           : 0;
 
         realtimeStatus.status = statusKOR;
-        realtimeStatus.currentScore = Number.isFinite(displayScore) ? displayScore : null;
+        realtimeStatus.currentScore = displayScore;
         await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
       }
 
       canvasCtx.restore();
     });
+        
+
+
+    // 오늘 날짜
+    let today = new Date().toISOString().split('T')[0];  
 
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -232,6 +241,9 @@
         }
       }, 500);
 
+      let hasClassStarted = false; // 수업이 한 번이라도 시작했는지
+
+
       const today = new Date().toISOString().split('T')[0];
       db.collection(COL_COURSES).doc(userDoc.courseId)
         .collection(COL_COURSES_TIMELINE).doc(today)
@@ -251,16 +263,34 @@
               realtimeStatus.status = '대기중';
               realtimeStatus.currentScore = null;
               RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+
+              if (hasClassStarted) { // 한 번이라도 시작됐을 때만 정산
+                await finalizeSession({
+                  userId: currentUser?.uid,
+                  courseId: userDoc?.courseId,
+                  today,
+                  userDoc,
+                  realtimeStatus,
+                  sessionScores
+                });
+
+                // 리셋
+                hasClassStarted = false; 
+                isClassStarted = false; // 수업 상태 꺼짐으로 변경
+                sessionScores = [];
+              }
             }
           }
         });
 
-      tempInterval = setInterval(async () => {
-        if (!isClassStarted || minuteCount === 0) return;
+      // 1분 타이머(임시저장)
+      console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
 
-        const avg = Math.round(minuteScoreSum / minuteCount);
-        const today = new Date().toISOString().split('T')[0];
-        const isSuccess = await DailyTLCRUD.addTempScore(user.uid, today, avg);
+      tempInterval = setInterval(async () => {
+
+        if (!isClassStarted || sessionScores.length === 0) return;
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        const isSuccess = await DailyTLCRUD.addTempScore(currentUser.uid, today, avg);
 
         if (isSuccess) {
           continuousFail = 0;
@@ -296,16 +326,47 @@
       }, 600000);
     });
 
-    window.addEventListener('beforeunload', () => {
-      if (realtimeStatus && userDoc && currentUser) {
-        db.collection(COL_COURSES).doc(userDoc.courseId)
-          .collection('realtime').doc(currentUser.uid)
-          .delete();
+    // admin에서 수업 종료
+    async function finalizeSession({
+      userId,
+      courseId,
+      today,
+      userDoc,
+      realtimeStatus,
+      sessionScores
+    }) {
+      // 1. 1분 미만 값이어도 임시 저장
+      if (sessionScores.length > 0) {
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        await DailyTLCRUD.addTempScore(userId, today, avg);
       }
 
-      if (videoElement.srcObject) {
-        videoElement.srcObject.getTracks().forEach(track => track.stop());
-      }
+      // 2. 타임라인 정산
+      await DailyTLCRUD.updateTimelineScore(userId, today);
+
+      // 3. totalScore 계산 및 daily_report 저장
+      const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
+      await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
+
+      // 모든 타이머 중지
+      if (aiInterval) clearInterval(aiInterval); // AI
+      if (tempInterval) clearInterval(tempInterval); // 1분 저장
+      if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
+    }
+
+
+    // 브라우저 창을 닫으면 realtime 삭제
+    window.addEventListener('beforeunload', () => {
+        if (realtimeStatus && userDoc && currentUser) {
+            db.collection(COL_COURSES).doc(userDoc.courseId)
+              .collection('realtime').doc(currentUser.uid)
+              .delete();
+        }
+
+        // 웹캠 정지
+        if (videoElement.srcObject) {
+          videoElement.srcObject.getTracks().forEach(track => track.stop());
+        }
     });
 
     exitBtn.addEventListener('click', async () => {
