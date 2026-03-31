@@ -323,12 +323,15 @@
       if (timelineInterval) clearInterval(timelineInterval); 
     }
 
+    // 브라우저 창을 닫으면 realtime 삭제
     window.addEventListener('beforeunload', () => {
         if (realtimeStatus && userDoc && currentUser) {
             db.collection(COL_COURSES).doc(userDoc.courseId)
               .collection('realtime').doc(currentUser.uid)
               .delete();
         }
+
+        // 웹캠 정지
         if (videoElement.srcObject) {
           videoElement.srcObject.getTracks().forEach(track => track.stop());
         }
