@@ -97,8 +97,6 @@
     let tempInterval = null; // 1분
     let timelineInterval = null // 10분
 
-    let minuteScoreSum = 0; // 1분 동안의 점수 합산
-    let minuteCount = 0; // 1분 동안의 점수 개수
     let latestAttentionState = new RemoteAttentionState();
     let isRemoteAnalyzing = false;
 
@@ -161,8 +159,6 @@
       const attentionState = latestAttentionState;
 
       if (isClassStarted && Number.isFinite(attentionState.score)) {
-        minuteScoreSum += attentionState.score;
-        minuteCount += 1;
         sessionScores.push(attentionState.score);
 
         console.log('[score]', attentionState.score, attentionState.state, {
@@ -271,17 +267,13 @@
                   today,
                   userDoc,
                   realtimeStatus,
-                  sessionScores: minuteCount > 0
-                    ? [Math.round(minuteScoreSum / minuteCount)]
-                    : sessionScores
+                  sessionScores
                 });
 
                 // 리셋
                 hasClassStarted = false; 
                 isClassStarted = false; // 수업 상태 꺼짐으로 변경
                 sessionScores = [];
-                minuteScoreSum = 0;
-                minuteCount = 0;
               }
             }
           }
@@ -319,8 +311,6 @@
           }
         }
 
-        minuteScoreSum = 0;
-        minuteCount = 0;
       }, 60000);
 
       timelineInterval = setInterval(async () => {
