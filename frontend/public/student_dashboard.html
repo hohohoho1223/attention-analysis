@@ -56,7 +56,7 @@
     <div class="end-sub">오늘 하루도 고생 많으셨습니다! 창을 닫아주세요.</div>
   </div>
 
-  <button class="withdraw-btn" onclick="alert('회원 탈퇴 기능은 DB 연동 후 업데이트 예정입니다.')">회원 탈퇴</button>
+  <button class="withdraw-btn" id="withdrawBtn">회원 탈퇴</button>
 
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
@@ -208,6 +208,44 @@
       displayName.textContent = userDoc.name;
       webcamSection.style.display = 'block';
       currentUser = user;
+
+      // 회웥 탈퇴
+      const withdrawBtn = document.getElementById('withdrawBtn');
+
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', async () => {
+          const confirmDelete = confirm("정말 탈퇴하시겠습니까? 과정 중 탈퇴 시 불이익을 받을 수 있습니다.");
+
+          if (!confirmDelete) return;
+
+          try {
+            const uid = currentUser.uid;
+
+            // 1️. realtime 제거
+            if (realtimeStatus && userDoc) {
+              await db.collection(COL_COURSES).doc(userDoc.courseId)
+                .collection('realtime').doc(uid)
+                .delete();
+            }
+
+            // 2️. Firestore 유저 데이터 삭제
+            const isDeleted = await UserCRUD.deleteUser(uid);
+            if (!isDeleted) throw new Error("Firestore 삭제 실패");
+
+            // 3️. Firebase Auth 계정 삭제 (중요)
+            await currentUser.delete();
+
+            alert("회원 탈퇴가 완료되었습니다.");
+
+            // 4️. 홈으로 이동
+            window.location.href = '/';
+
+          } catch (error) {
+            console.error("회원 탈퇴 실패:", error);
+            alert("탈퇴 중 오류가 발생했습니다.");
+          }
+        });
+      }
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
