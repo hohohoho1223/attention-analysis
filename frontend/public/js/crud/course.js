@@ -69,7 +69,8 @@ var CourseCRUD = {
                 .get();
 
             // 가져온 결과만 배열로 변환
-            return snapshot.docs.map(doc => doc.data());
+            // return snapshot.docs.map(doc => doc.data());
+            return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
         } catch (error) {
             console.error("과정별 학생 목록 조회 실패:", error);
             return [];
