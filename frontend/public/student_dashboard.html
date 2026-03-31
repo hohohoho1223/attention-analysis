@@ -112,6 +112,13 @@
     });
 
     faceMesh.onResults(async (results) => {
+      console.log('[onResults]', {
+      readyState: videoElement.readyState,
+      isClassStarted,
+      score: latestAttentionState?.score,
+      sessionLen: sessionScores.length
+    });
+
       canvasElement.width = videoElement.videoWidth;
       canvasElement.height = videoElement.videoHeight;
       canvasCtx.save();
@@ -205,6 +212,8 @@
         return;
       }
 
+      console.log('[AUTH]', { user: user.uid, userDoc });
+
       displayName.textContent = userDoc.name;
       webcamSection.style.display = 'block';
       currentUser = user;
@@ -277,6 +286,13 @@
       db.collection(COL_COURSES).doc(userDoc.courseId)
         .collection(COL_COURSES_TIMELINE).doc(today)
         .onSnapshot(async (doc) => {
+          console.log('[SNAPSHOT]', {
+          exists: doc.exists,
+          data: doc.exists ? doc.data() : null,
+          isClassStartedBefore: isClassStarted,
+          hasClassStarted
+          });
+
           if (doc.exists) {
             isClassStarted = doc.data().isStarted === true;
             if (isClassStarted) {
@@ -306,9 +322,17 @@
                 hasClassStarted = false; 
                 isClassStarted = false; 
                 sessionScores = [];
+                isRemoteAnalyzing = false;
+                latestAttentionState = new RemoteAttentionState();
+                continuousFail = 0;
               }
             }
           }
+        
+          console.log('[SNAPSHOT] after set', {
+            isClassStarted,
+            hasClassStarted
+          });
         });
 
       console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
@@ -348,6 +372,13 @@
     });
 
     async function finalizeSession({ userId, courseId, today, userDoc, realtimeStatus, sessionScores }) {
+      console.log('[FINALIZE ENTER]', {
+        userId,
+        courseId,
+        today,
+        sessionScoresLen: sessionScores.length
+      });
+      
       if (sessionScores.length > 0) {
         const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
         await DailyTLCRUD.addTempScore(userId, today, avg);
@@ -356,14 +387,13 @@
       const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
       await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
 
-      // 수업에 참여한 학생들을 db에 저장
       await db.collection(COL_COURSES).doc(courseId)
         .collection(COL_COURSES_TIMELINE).doc(today)
         .set({ completedUids: firebase.firestore.FieldValue.arrayUnion(userId) }, { merge: true });
-      
-      if (aiInterval) clearInterval(aiInterval); 
-      if (tempInterval) clearInterval(tempInterval); 
-      if (timelineInterval) clearInterval(timelineInterval); 
+
+      // ✅ aiInterval은 살려둠 (두 번째 수업에서도 계속 동작해야 함)
+      if (tempInterval) { clearInterval(tempInterval); tempInterval = null; }
+      if (timelineInterval) { clearInterval(timelineInterval); timelineInterval = null; }
     }
 
     // 브라우저 창을 닫으면 realtime 삭제
