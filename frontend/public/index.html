@@ -59,18 +59,16 @@
       </div>
       <div class="input-group">
         <label>과정명</label>
-        <select id="courseName">
-          <option value="AI NLP 5기">AI NLP 5기</option>
-          <option value="AI CV 4기">AI CV 4기</option>
-          <option value="프론트엔드 3기">프론트엔드 3기</option>
-        </select>
+        <select id="courseName">과정목록</select>
       </div>
       <button class="submit-btn" id="submitBtn">수업 입장하기</button>
     </div>
 
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
+  <script src="/js/models/course.js"></script>
   <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/course.js"></script>
   
   <script>
     const submitBtn = document.getElementById('submitBtn');
@@ -89,6 +87,15 @@
           console.log("userDoc:", userDoc); // ← CRUD 작동 확인용
 
           if (!userDoc) {
+            const courseSelect = document.getElementById('courseName');
+            const courses = await CourseCRUD.getCourses();
+            courses.forEach(course => {
+              const option = document.createElement('option');
+              option.value = course.courseId;
+              option.textContent = course.courseName;
+              courseSelect.appendChild(option);
+            });
+
             loginSection.style.display = 'none';
             inputSection.style.display = 'block';
           } else if (userDoc.role === 'admin') {
