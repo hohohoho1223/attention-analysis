@@ -56,17 +56,15 @@
     <div class="end-sub">오늘 하루도 고생 많으셨습니다! 창을 닫아주세요.</div>
   </div>
 
-  <button class="withdraw-btn" onclick="alert('회원 탈퇴 기능은 DB 연동 후 업데이트 예정입니다.')">회원 탈퇴</button>
+  <button class="withdraw-btn" id="withdrawBtn">회원 탈퇴</button>
 
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
   <script src="/js/models/admin_realtime.js"></script>
   <script src="/js/models/student_report.js"></script>
-  <script src="/js/models/course.js"></script>
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/student_report.js"></script>
   <script src="/js/crud/admin_realtime.js"></script>
-  <script src="/js/crud/course.js"></script>
   <script src="/js/ai_logic.js"></script>
 
   <script>
@@ -94,27 +92,14 @@
     let aiInterval = null;
     let userDoc = null;
     let realtimeStatus = null;
-    let continuousFail = 0; 
-    
-    // 분석 데이터 저장용
     let sessionScores = [];
-    let updateTimeline = []; 
-    let classStartTime = null;
-    let secondInterval = null;
+    let continuousFail = 0; 
+
+    let tempInterval = null; 
     let timelineInterval = null;
 
     let latestAttentionState = new RemoteAttentionState();
     let isRemoteAnalyzing = false;
-
-    // 트랜잭션 순환 방지
-    let hasFinalized = false;
-
-    function toHHMMSS(seconds) {
-        const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
-        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-        const s = String(seconds % 60).padStart(2, '0');
-        return `${h}:${m}:${s}`;
-    }
 
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
@@ -205,7 +190,6 @@
     let today = new Date().toISOString().split('T')[0];  
 
     auth.onAuthStateChanged(async (user) => {
-
       if (!user) {
         window.location.href = '/';
         return;
@@ -224,6 +208,44 @@
       displayName.textContent = userDoc.name;
       webcamSection.style.display = 'block';
       currentUser = user;
+
+      // 회웥 탈퇴
+      const withdrawBtn = document.getElementById('withdrawBtn');
+
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', async () => {
+          const confirmDelete = confirm("정말 탈퇴하시겠습니까? 과정 중 탈퇴 시 불이익을 받을 수 있습니다.");
+
+          if (!confirmDelete) return;
+
+          try {
+            const uid = currentUser.uid;
+
+            // 1️. realtime 제거
+            if (realtimeStatus && userDoc) {
+              await db.collection(COL_COURSES).doc(userDoc.courseId)
+                .collection('realtime').doc(uid)
+                .delete();
+            }
+
+            // 2️. Firestore 유저 데이터 삭제
+            const isDeleted = await UserCRUD.deleteUser(uid);
+            if (!isDeleted) throw new Error("Firestore 삭제 실패");
+
+            // 3️. Firebase Auth 계정 삭제 (중요)
+            await currentUser.delete();
+
+            alert("회원 탈퇴가 완료되었습니다.");
+
+            // 4️. 홈으로 이동
+            window.location.href = '/';
+
+          } catch (error) {
+            console.error("회원 탈퇴 실패:", error);
+            alert("탈퇴 중 오류가 발생했습니다.");
+          }
+        });
+      }
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -258,13 +280,11 @@
           if (doc.exists) {
             isClassStarted = doc.data().isStarted === true;
             if (isClassStarted) {
-              classStartTime = classStartTime ?? new Date(); // 수업시작시간 체크 (최초 1회)
               hasClassStarted = true; 
               waitingOverlay.style.opacity = '0';
               setTimeout(() => {
                 waitingOverlay.style.display = 'none';
               }, 500);
-              hasClassStarted = true;
             } else {
               waitingOverlay.style.display = 'flex';
               setTimeout(() => {
@@ -272,7 +292,7 @@
               }, 10);
               realtimeStatus.status = '대기중';
               realtimeStatus.currentScore = null;
-              await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+              RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
 
               if (hasClassStarted) { 
                 await finalizeSession({
@@ -283,32 +303,22 @@
                   realtimeStatus,
                   sessionScores
                 });
+                hasClassStarted = false; 
+                isClassStarted = false; 
+                sessionScores = [];
               }
             }
           }
         });
 
       console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
-      
-      // 5초마다 updateTimeline에 점수 누적
-      secondInterval = setInterval(async () => {
-        if (!isClassStarted || sessionScores.length === 0) return;
-        if (isClassStarted && latestAttentionState) {
-          const elapsed = Math.floor((new Date() - classStartTime) / 1000); // 경과 초
-          const timeKey = toHHMMSS(elapsed); // 00:00:00
-          const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-    
-          updateTimeline.push({ t: timeKey, v: avg });
-        }
-      }, 5000);
 
-      // 1분마다 db 전송
-      timelineInterval = setInterval(async () => {
-        if (!isClassStarted || updateTimeline.length === 0) return;
-        const isSuccess = await DailyTLCRUD.addBulkScoresToList(currentUser.uid, today, updateTimeline);
+      tempInterval = setInterval(async () => {
+        if (!isClassStarted || sessionScores.length === 0) return;
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        const isSuccess = await DailyTLCRUD.addTempScore(currentUser.uid, today, avg);
 
         if (isSuccess) {
-          updateTimeline = [];
           continuousFail = 0;
         } else {
           continuousFail += 1;
@@ -319,7 +329,7 @@
               realtimeStatus.currentScore = null;
               await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
             }
-            clearInterval(secondInterval);
+            clearInterval(tempInterval);
             clearInterval(timelineInterval);
             clearInterval(aiInterval);
 
@@ -330,61 +340,40 @@
         }
       }, 60000);
 
+      timelineInterval = setInterval(async () => {
+        if (!isClassStarted) return;
+        const today = new Date().toISOString().split('T')[0];
+        await DailyTLCRUD.updateToTimeline(user.uid, today);
+      }, 600000);
     });
 
-    // admin에서 수업 종료
-    async function finalizeSession({
-      userId,
-      courseId,
-      today,
-      userDoc,
-      realtimeStatus,
-      sessionScores
-    }) {
-      if (hasFinalized) return;
-      hasFinalized = true;
+    async function finalizeSession({ userId, courseId, today, userDoc, realtimeStatus, sessionScores }) {
+      if (sessionScores.length > 0) {
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        await DailyTLCRUD.addTempScore(userId, today, avg);
+      }
+      await DailyTLCRUD.updateTimelineScore(userId, today);
+      const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
+      await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
 
-      try{
-
-          // 1. 1분 미만 값이어도 임시 저장
-          if (sessionScores.length > 0) {
-            const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-            await DailyTLCRUD.addTempScore(userId, today, avg);
-          }
-    
-          // 2. 타임라인 정산
-          await DailyTLCRUD.updateTimelineScore(userId, today);
-    
-          // 3. totalScore 계산 및 daily_report 저장
-          const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
-          await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
-          await CourseTLCRUD.completeStudentReport(courseId, today, userId);
-    
-          // 모든 타이머 중지
-          if (aiInterval) clearInterval(aiInterval); // AI
-          if (secondInterval) clearInterval(secondInterval); // 5초 저장
-          if (timelineInterval) clearInterval(timelineInterval); // 1분 저장
-
-          // 리셋
-          hasClassStarted = false; 
-          isClassStarted = false; // 수업 상태 꺼짐으로 변경
-          classStartTime = null; // 수업 시작 시간 리셋
-          sessionScores = [];
-
-        }catch(e){
-          console.error(e);
-          hasFinalized = false;
-        }
-
+      // 수업에 참여한 학생들을 db에 저장
+      await db.collection(COL_COURSES).doc(courseId)
+        .collection(COL_COURSES_TIMELINE).doc(today)
+        .set({ completedUids: firebase.firestore.FieldValue.arrayUnion(userId) }, { merge: true });
+      
+      if (aiInterval) clearInterval(aiInterval); 
+      if (tempInterval) clearInterval(tempInterval); 
+      if (timelineInterval) clearInterval(timelineInterval); 
     }
 
-    // 브라우저 닫으면 리스트에서 제거
+    // 브라우저 창을 닫으면 realtime 삭제
     window.addEventListener('beforeunload', () => {
         if (realtimeStatus && userDoc && currentUser) {
             db.collection(COL_COURSES).doc(userDoc.courseId)
               .collection('realtime').doc(currentUser.uid)
               .delete();
-         }
+        }
+
         // 웹캠 정지
         if (videoElement.srcObject) {
           videoElement.srcObject.getTracks().forEach(track => track.stop());

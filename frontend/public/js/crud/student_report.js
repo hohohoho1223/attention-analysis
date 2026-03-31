@@ -21,20 +21,7 @@ var StudentReportCRUD = {
             const doc = await docRef.get();
             return doc.exists ? doc.data().totalScore : null;
         } catch (error) {
-            console.error("[Daily_report] totalScore 조회 실패: ", error);
-            return null;
-        }
-    },
-
-    // daily Report 전체 조회
-    getDailyReport: async function(uid, dateString) {
-        try {
-            const docRef = db.collection(COL_USERS).doc(uid)
-                            .collection(COL_DAILY_REPORT).doc(dateString);
-            const doc = await docRef.get();
-            return doc.exists ? doc.data() : null;
-        } catch (error) {
-            console.error("[Daily_report] 전체 조회 실패: ", error);
+            console.error("[Daily_report] 조회 실패: ", error);
             return null;
         }
     },
@@ -54,15 +41,15 @@ var StudentReportCRUD = {
     },
 
     // daily report 생성 (수업 종료 시 호출)
-    createDailyReport: async function(uid, date, userData, timelineScoreArray, absentCount) {
-        if (!timelineScoreArray || timelineScoreArray.length === 0) {
+    createDailyReport: async function(uid, date, userData, timelineScore, absentCount) {
+        if (!timelineScore || timelineScore.length === 0) {
             console.warn("정산할 데이터가 없습니다.");
             return null;
         }
 
         // 전체 평균 계산
         var totalScore = Math.round(
-            scores.reduce((a, b) => a + b, 0) / scores.length
+            timelineScore.reduce((a, b) => a + b, 0) / timelineScore.length
         );
         // 등급 판정
         var grade = this.calculateGrade(totalScore);
@@ -138,38 +125,46 @@ var StudentReportCRUD = {
 
 var DailyTLCRUD = {
     // 1. 1분마다 점수를 '추가'하는 기능
-    addBulkScoresToList: async function(uid, date, scoresArray) {
-        if (!scoresArray || scoresArray.length === 0) return;
-
+    addTempScore: async function(uid, date, score) {
         var docRef = db.collection('users').doc(uid)
-                    .collection('daily_timeline').doc(date);
+                       .collection('daily_timeline').doc(date); // 특정 행만 다루어야 하므로 converter 사용하지 않음
 
         try {
+            // 문서가 없으면 생성(merge), 있으면 tempScore 배열에 점수 추가
             await docRef.set({
                 uid: uid,
-                timelineScore: firebase.firestore.FieldValue.arrayUnion(...scoresArray),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                tempScore: firebase.firestore.FieldValue.arrayUnion(score),
             }, { merge: true });
             
             return true;
         } catch (error) {
-            console.error("[Daily_timeline] 벌크 리스트 저장 실패: ", error);
+            console.error("[Daily_timeline] tempScore 저장 실패: ", error);
             return false;
         }
     },
 
-    // 2. timelineScore 전체 조회 (차트용)
-    getTimelineScore: async function(uid, date) {
-        const docRef = db.collection('users').doc(uid)
-                         .collection('daily_timeline').doc(date);
+    // 2. 10분마다 또는 수업 종료 시 점수를 '정산'하는 기능
+    updateTimelineScore: async function(uid, date) {
+        var docRef = db.collection('users').doc(uid)
+                       .collection('daily_timeline').doc(date);  // 특정 행만 다루어야 하므로 converter 사용하지 않음
         try {
-            const doc = await docRef.get();
-            // 🌟 데이터가 없으면 빈 리스트 [] 반환
-            if (!doc.exists) return [];
-            return doc.data().timelineScore || [];
+            await db.runTransaction(async function(transaction) {
+                var doc = await transaction.get(docRef);
+                var tempScore = doc.exists ? (doc.data().tempScore || []) : [];
+                if (tempScore.length === 0) return;
+
+                var avg = Math.round(
+                    tempScore.reduce(function(a, b) { return a + b; }, 0) / tempScore.length
+                );
+                transaction.update(docRef, {
+                    timelineScore: firebase.firestore.FieldValue.arrayUnion(avg),
+                    tempScore: [] // tempScore 리셋
+                }, { merge: true });
+            });
+            return true;
         } catch (error) {
-            console.error("[Daily_timeline] 읽기 실패: ", error);
-            return [];
+            console.error("[Daily_timeline] timelineScore 저장 실패: ", error);
+            return false;
         }
     }
 };

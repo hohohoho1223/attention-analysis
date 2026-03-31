@@ -80,79 +80,66 @@ var CourseCRUD = {
 
 // 전체 학생의 타임라인 평균 계산
 var CourseTLCRUD = {
-    // 1. 과정별 전체 학생의 타임라인 점수 조회 (필터링 포함)
-    getStudentTimelines: async function(courseId, date) {
-        // CourseCRUD에서 학생 리스트를 가져온다고 가정
-        const students = await CourseCRUD.getStudentsByCourse(courseId);
-        
-        const timelinePromises = students.map(async (student) => {
-            // 기존 StudentReportCRUD의 메서드 활용
-            return await StudentReportCRUD.getTimelineScore(student.uid, date);
-        });
-
-        const allTimelines = await Promise.all(timelinePromises);
-        // 데이터가 있는 학생들의 타임라인만 필터링해서 반환
-        return allTimelines.filter(tl => tl.length > 0);
+    // 1. 저장된 CourseTL 조회하기
+    getCourseTimeline: async function(courseId, date) {
+        const doc = await db.collection(COL_COURSES).doc(courseId)
+                            .collection('course_timeline').doc(date)
+                            .withConverter(courseTLConverter).get();
+        return doc.exists ? doc.data() : null;
     },
 
-    // 2. 인덱스별 평균 계산 ([] + [] -> [])
+    // 2. 과정별 전체 학생의 타임라인 점수 조회 (필터링 포함)
+    getStudentTimelines: async function(courseId, date) {
+        try {
+            const snap = await db.collection(COL_COURSES).doc(courseId)
+                                 .collection(COL_COURSES_TIMELINE).doc(date).get();
+            const uids = snap.data()?.completedUids ?? [];
+            if (uids.length === 0) return [];
+
+            const allTimelines = await Promise.all(
+                uids.map(uid => StudentReportCRUD.getTimelineScore(uid, date))
+            );
+            return allTimelines.filter(tl => tl && tl.length > 0);
+        } catch (e) {
+            console.error("❌ 타임라인 수집 실패:", e);
+            return [];
+        }
+    },
+
+    // 3. 인덱스별 평균 계산 ([] + [] -> [])
     calculateAverageTimeline: function(allTimelines) {
         if (allTimelines.length === 0) return [];
-        
-        // 가장 긴 타임라인 길이를 기준으로 루프 수행
         const maxLength = Math.max(...allTimelines.map(tl => tl.length));
         const avgTimeline = [];
-
         for (let i = 0; i < maxLength; i++) {
-            let sum = 0;
-            let count = 0;
+            let sum = 0, count = 0;
             allTimelines.forEach(tl => {
-                if (tl[i] !== undefined) {
-                    sum += tl[i];
-                    count++;
-                }
+                if (tl[i] !== undefined) { sum += tl[i]; count++; }
             });
-            // 해당 시간대(index)의 반 전체 평균 push
             avgTimeline.push(count > 0 ? Math.round(sum / count) : 0);
         }
         return avgTimeline;
     },
 
-    // 3. 계산된 데이터를 CourseTL DB에 저장 (Converter 사용)
+    // 4. 계산된 데이터를 CourseTL DB에 저장 (Converter 사용)
     saveCourseTimeline: async function(courseId, date, timelineScore) {
         if (timelineScore.length === 0) return;
-
-        // 전체 평균, 최고, 최저점 미리 계산
         const avgScore = Math.round(timelineScore.reduce((a, b) => a + b, 0) / timelineScore.length);
-        const maxScore = Math.max(...timelineScore);
-        const minScore = Math.min(...timelineScore);
 
-        // 강사님이 만든 Model 인스턴스 생성
         const newTL = new CourseTimeline(
             date, 
-            false, // isStarted: 기록 종료이므로 false
-            avgScore, 
-            maxScore, 
-            minScore, 
-            timelineScore, 
+            false, // isStarted
+            true, // isCalculated
+            avgScore,
+            Math.max(...timelineScore),
+            Math.min(...timelineScore),
+            timelineScore,
             timelineScore.length
         );
-
-        const docRef = db.collection(COL_COURSES).doc(courseId)
-                         .collection('course_timeline').doc(date)
-                         .withConverter(courseTLConverter); // 컨버터 적용
-
-        await docRef.set(newTL);
+        await db.collection(COL_COURSES).doc(courseId)
+                .collection('course_timeline').doc(date)
+                .withConverter(courseTLConverter).set(newTL);
         return newTL;
     },
 
-    // 4. 저장된 CourseTL 조회하기
-    getCourseTimeline: async function(courseId, date) {
-        const docRef = db.collection(COL_COURSES).doc(courseId)
-                         .collection('course_timeline').doc(date)
-                         .withConverter(courseTLConverter);
-        
-        const doc = await docRef.get();
-        return doc.exists ? doc.data() : null;
-    }
 };
