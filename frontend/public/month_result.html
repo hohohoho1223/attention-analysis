@@ -69,6 +69,11 @@
         <span id="currentMonthTitle">2026년 3월</span>
         <button class="month-nav-btn" id="nextMonth">다음 달 ></button>
       </div>
+        <div style="margin-bottom: 20px;">
+          <select id="courseSelect" style="width: 100%; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 15px; font-weight: bold;">
+          </select>
+        </div>
+
       
       <div class="calendar-grid">
         <div class="day-name sun">일</div> <div class="day-name">월</div> <div class="day-name">화</div> <div class="day-name">수</div> <div class="day-name">목</div> <div class="day-name">금</div> <div class="day-name sat">토</div>
@@ -109,74 +114,124 @@
   <script src="/js/models/student_report.js"></script>
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/student_report.js"></script>
+
+  <script src="/js/models/course.js"></script>
+  <script src="/js/crud/course.js"></script>
   
   <script>
-    // 🌟 1. 현재 날짜 설정 (건우님이 테스트하신 2026년 3월 26일 기준으로 고정해서 먼저 보여줍니다!)
-    let currentDate = new Date(); // 연, 월(0=1월), 일
+    let currentDate = new Date();
 
     const calendarBody = document.getElementById('calendarBody');
     const currentMonthTitle = document.getElementById('currentMonthTitle');
     const prevMonthBtn = document.getElementById('prevMonth');
     const nextMonthBtn = document.getElementById('nextMonth');
 
+    let isAvgMode = false;
+    let currentStudents = [];
+
+    async function renderCalendarAvg(students) {
+        console.log('[renderCalendarAvg] 진입', { studentCount: students.length, students });
+        calendarBody.innerHTML = '';
+
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        currentMonthTitle.textContent = `${year}년 ${month + 1}월`;
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        const dayScoreMap = {};
+
+        await Promise.all(students.map(async (student) => {
+            console.log('[renderCalendarAvg] 학생 uid 확인:', student.uid);
+            const monthlyData = await StudentReportCRUD.getMonthDailyReports(student.uid, year, month + 1);
+            console.log('[renderCalendarAvg] monthlyData:', student.uid, monthlyData);
+            Object.entries(monthlyData).forEach(([dateKey, data]) => {
+                const dayKey = parseInt(dateKey.substring(8));
+                if (!dayScoreMap[dayKey]) dayScoreMap[dayKey] = [];
+                if (data.totalScore !== undefined) dayScoreMap[dayKey].push(data.totalScore);
+            });
+        }));
+
+        console.log('[renderCalendarAvg] dayScoreMap:', dayScoreMap);
+
+        const dailyDataList = {};
+        Object.entries(dayScoreMap).forEach(([day, scores]) => {
+            dailyDataList[day] = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        });
+
+        console.log('[renderCalendarAvg] dailyDataList:', dailyDataList);
+
+        for (let i = 0; i < firstDay; i++) {
+            const emptyDay = document.createElement('div');
+            emptyDay.classList.add('empty-day');
+            calendarBody.appendChild(emptyDay);
+        }
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dayEl = document.createElement('div');
+            dayEl.classList.add('calendar-day');
+
+            const dayOfWeek = new Date(year, month, i).getDay();
+            if (dayOfWeek === 0) dayEl.classList.add('sun');
+            if (dayOfWeek === 6) dayEl.classList.add('sat');
+
+            const score = dailyDataList[i];
+            const grade = score !== undefined ? StudentReportCRUD.calculateGrade(score) : '';
+
+            dayEl.innerHTML = `
+                <div class="day-num">${i}</div>
+                <div class="day-grade ${grade || 'empty'}">${grade}</div>
+                <div class="day-point ${score !== undefined ? 'has-data' : ''}"></div>
+            `;
+            calendarBody.appendChild(dayEl);
+        }
+
+        console.log('[renderCalendarAvg] 렌더링 완료');
+    }
+
     // 🌟 2. 달력 그리기 & 파이어베이스 데이터 연동 마법
     async function renderCalendar(uid) {
-      calendarBody.innerHTML = ''; // 기존 달력 청소
+      console.log('[renderCalendar] 진입', { uid });
+      calendarBody.innerHTML = '';
       
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       
       currentMonthTitle.textContent = `${year}년 ${month + 1}월`;
 
-      const firstDay = new Date(year, month, 1).getDay(); // 이번 달 1일이 무슨 요일?(0~6)
-      const daysInMonth = new Date(year, month + 1, 0).getDate(); // 이번 달 며칠까지 있어?
-
-      ////// db 테스트 (테스트 후 삭제해주세요) : 형식 00-00-00
-      console.log("조회 범위:", firstDay, daysInMonth);
-
-      const snapshot = await db.collection(COL_USERS).doc(uid)
-        .collection(COL_DAILY_REPORT)
-        .get();
-
-      snapshot.forEach(doc => {
-        console.log("🔥 실제 데이터:", doc.id, doc.data());
-      });
-      ////////////
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
       
-      // 🌟 데이터베이스에서 이번 달 하루치 데이터 싹 긁어오기! (엄청난 기능 🚀)
       let dailyDataList = {};
       try {
           const monthKey = `${year}${(month + 1).toString().padStart(2, '0')}`;
           console.log(`📡 파이어베이스에서 ${monthKey} 데이터를 긁어오는 중...`);
 
-          // 효율적으로 '이번 달' 데이터만 싹 긁어옴
           const monthlyData = await StudentReportCRUD.getMonthDailyReports(uid, year, month + 1);
+          console.log('[renderCalendar] monthlyData:', monthlyData);
 
           Object.entries(monthlyData).forEach(([dateKey, data]) => {
-              // doc.id는 YYYY-MM-DD 형식. 날짜 숫자(DD)만 따서 저장.
               const dayKey = parseInt(dateKey.substring(8));
               dailyDataList[dayKey] = data.totalScore;
           });
-          
-          // 🚀 어제 저장한 26일 데이터 팩트체크!
+
+          console.log('[renderCalendar] dailyDataList:', dailyDataList);
+
           if (year === 2026 && month === 2 && dailyDataList[26]) {
               console.log(`✅ 대박! 어제 저장한 26일 100점 데이터를 성공적으로 읽어왔습니다!`);
           }
-
 
       } catch (error) {
           console.error("데이터 로딩 중 에러:", error);
       }
 
-      // 달력 칸 그리기
-      // 1. 1일 전까지 빈칸
       for (let i = 0; i < firstDay; i++) {
         const emptyDay = document.createElement('div');
         emptyDay.classList.add('empty-day');
         calendarBody.appendChild(emptyDay);
       }
 
-      // 2. 🌟 1일부터 끝날까지 칸 만들고 데이터 매핑하기
       for (let i = 1; i <= daysInMonth; i++) {
         const dayEl = document.createElement('div');
         dayEl.classList.add('calendar-day');
@@ -185,20 +240,18 @@
         if (dayOfWeek === 0) dayEl.classList.add('sun');
         if (dayOfWeek === 6) dayEl.classList.add('sat');
 
-        const score = dailyDataList[i]; // 오늘 자 점수가 DB에 있는가?
+        const score = dailyDataList[i];
         let grade = '';
         if (score !== undefined) {
-          grade = StudentReportCRUD.calculateGrade(score); // 100점 -> A로 변환!
+          grade = StudentReportCRUD.calculateGrade(score);
         }
 
-        // 칸 내부 디자인 (날짜, 등급, 점구 표시)
         dayEl.innerHTML = `
           <div class="day-num">${i}</div>
           <div class="day-grade ${grade || 'empty'}">${grade}</div>
           <div class="day-point ${score !== undefined ? 'has-data' : ''}"></div>
         `;
 
-        // 🖱️ 클릭하면 상세 페이지로 날짜 던져주기 (나중에 피그마 설계도대로 그래프 그릴 곳!)
         dayEl.addEventListener('click', () => {
           const formattedDate = `${year}-${(month + 1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
           window.location.href = `/detail.html?date=${formattedDate}&uid=${currentUid}`;
@@ -207,16 +260,18 @@
         calendarBody.appendChild(dayEl);
       }
       
-      // 3. 📊 오른쪽 요약 카드 업데이트 (어제 성공한 26일 점수 덕분에 랭킹에 잡힐 겁니다!)
+      console.log('[renderCalendar] 렌더링 완료, updateSummaries 호출');
       updateSummaries(uid, year, month);
     }
 
-    // 🌟 3. 주간/월간 요약 업데이트 마법 (어제 우리가 저장한 100점 덕분에 평균이 오를 겁니다!)
+    // 🌟 3. 주간/월간 요약 업데이트 마법
     async function updateSummaries(uid, year, month) {
-        // 월간 평균 (건우님 파일 `getMonthlyData` 함수 그대로 사용!)
-        console.log(`📡 파이어베이스에서 ${year}년 ${month + 1}월 평균 점수를 계산 중...`);
+        console.log('[updateSummaries] 진입', { uid, year, month });
         const monthlyData = await StudentReportCRUD.getMonthDailyReports(uid, year, month + 1);
+        console.log('[updateSummaries] monthlyData:', monthlyData);
+
         const monthlyResult = await StudentReportCRUD.calculateRangeAverage(uid, Object.keys(monthlyData));
+        console.log('[updateSummaries] monthlyResult:', monthlyResult);
         
         if (monthlyResult.count > 0) {
             document.getElementById('monthlyScore').textContent = `${monthlyResult.score}%`;
@@ -226,17 +281,15 @@
             document.getElementById('monthlyGrade').textContent = `-`;
         }
         
-        // 🌟 주간 평균 (2026년 3월 4주차로 건우님이 100점 맞은 그 주를 자동으로 계산!)
         let weekStartDate, weekEndDate;
-        const testDate = new Date(currentDate); // 건우님이 테스트한 3월 26일
+        const testDate = new Date(currentDate);
         
-        // 3월 26일이 포함된 주의 일요일~토요일 날짜 구하기
         weekStartDate = new Date(testDate.setDate(testDate.getDate() - testDate.getDay()));
         weekEndDate = new Date(testDate.setDate(testDate.getDate() - testDate.getDay() + 6));
         
         const formatForWeekly = (date) => `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
         
-        console.log(`📡 파이어베이스에서 이번 주(${formatForWeekly(weekStartDate)} ~ ${formatForWeekly(weekEndDate)}) 평균 점수를 계산 중...`);
+        console.log(`[updateSummaries] 이번 주: ${formatForWeekly(weekStartDate)} ~ ${formatForWeekly(weekEndDate)}`);
 
         const weekDates = [];
         const weekCursor = new Date(weekStartDate);
@@ -244,7 +297,10 @@
             weekDates.push(formatForWeekly(new Date(weekCursor)));
             weekCursor.setDate(weekCursor.getDate() + 1);
         }
+
+        console.log('[updateSummaries] weekDates:', weekDates);
         const weeklyResult = await StudentReportCRUD.calculateRangeAverage(uid, weekDates);
+        console.log('[updateSummaries] weeklyResult:', weeklyResult);
         
         if (weeklyResult.count > 0) {
             document.getElementById('weeklyScore').textContent = `${weeklyResult.score}%`;
@@ -255,75 +311,69 @@
         }
     }
 
-    // 버튼 이벤트
+    // ✅ 이전/다음 달 버튼: 모드에 따라 분기
     prevMonthBtn.addEventListener('click', () => {
       currentDate.setMonth(currentDate.getMonth() - 1);
-      renderCalendar(currentUid);
+      console.log('[prevMonth] 클릭', { isAvgMode, currentUid });
+      if (isAvgMode) renderCalendarAvg(currentStudents);
+      else renderCalendar(currentUid);
     });
 
     nextMonthBtn.addEventListener('click', () => {
       currentDate.setMonth(currentDate.getMonth() + 1);
-      renderCalendar(currentUid);
+      console.log('[nextMonth] 클릭', { isAvgMode, currentUid });
+      if (isAvgMode) renderCalendarAvg(currentStudents);
+      else renderCalendar(currentUid);
     });
 
-    ///////////DB 더미데이터(이후 실제데이터 연결되면 삭제)
-
-    async function seedDummyData(uid) {
-        console.log("더미 데이터 생성 시작");
-
-        const testData = [
-          { date: '2026-03-20', score: 55 },
-          { date: '2026-03-21', score: 65 },
-          { date: '2026-03-22', score: 72 },
-          { date: '2026-03-23', score: 80 },
-          { date: '2026-03-24', score: 90 },
-          { date: '2026-03-25', score: 85 },
-          { date: '2026-03-26', score: 95 },
-          { date: '2026-03-27', score: 70 },
-          { date: '2026-03-28', score: 60 }
-        ];
-
-        for (const d of testData) {
-          await db.collection('users').doc(uid)
-            .collection('daily_report').doc(d.date)
-            .set({
-              name: '테스트',
-              courseName: '미정',
-              grade: StudentReportCRUD.calculateGrade(d.score),
-              totalScore: d.score,
-              absentCount: 0,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
-
-        console.log("더미 데이터 생성 완료");
-      }
-
-      ///////////////////////
-
-    // 🌟 대망의 첫 달력 그리기! (어제 성공의 달콤한 열매를 맛볼 시간입니다 🍒)
     let currentUid = null;
     auth.onAuthStateChanged(async (user) => {
+      console.log('[onAuthStateChanged] 진입', { user });
       // if (!user) { window.location.href = '/'; return; }
       // currentUid = user.uid;
       // renderCalendar(currentUid);
+      if (!user) { window.location.href = '/'; return; }
+      
+      const userDoc = await UserCRUD.getUser(user.uid);
+      console.log('[onAuthStateChanged] userDoc:', userDoc);
+      if (!userDoc) { window.location.href = '/'; return; }
 
+      const courseSelect = document.getElementById('courseSelect');
+      const courses = await CourseCRUD.getCourses();
+      courses.forEach(course => {
+          const option = document.createElement('option');
+          option.value = course.courseId;
+          option.textContent = course.courseName;
+          courseSelect.appendChild(option);
+      });
 
-      //////////더미데이터 삽입 (더미데이터)
-      if (!user) return;
-      const uid = user.uid;
+      courseSelect.addEventListener('change', async () => {
+          currentStudents = await CourseCRUD.getStudentsByCourse(courseSelect.value);
+          renderCalendarAvg(currentStudents);
+      });
 
-      try {
-        await seedDummyData(uid);
-      } catch (e) {
-        console.error("더미 삽입 실패:", e);
+      const params = new URLSearchParams(window.location.search);
+      const uidParam = params.get('uid');
+      console.log('[onAuthStateChanged] uidParam:', uidParam, '| userDoc.role:', userDoc.role);
+
+      if (uidParam) {
+          // 단일 학생 모드 - 드롭다운 숨기기
+          document.getElementById('courseSelect').style.display = 'none';
+          isAvgMode = false;
+          currentUid = uidParam;
+          renderCalendar(currentUid);
+      } else if (userDoc.role === 'admin') {
+          // admin - 드롭다운 보여주고 과정 선택
+          isAvgMode = true;
+          currentStudents = await CourseCRUD.getStudentsByCourse(courseSelect.value);
+          renderCalendarAvg(currentStudents);
+      } else {
+          // 학생 본인 - 드롭다운 숨기기
+          document.getElementById('courseSelect').style.display = 'none';
+          isAvgMode = false;
+          currentUid = user.uid;
+          renderCalendar(currentUid);
       }
-
-      renderCalendar(uid);
-
-      /////////////
-
-
     });
 
   </script>
