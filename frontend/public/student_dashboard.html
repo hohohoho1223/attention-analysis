@@ -271,13 +271,17 @@
                   today,
                   userDoc,
                   realtimeStatus,
-                  sessionScores
+                  sessionScores: minuteCount > 0
+                    ? [Math.round(minuteScoreSum / minuteCount)]
+                    : sessionScores
                 });
 
                 // 리셋
                 hasClassStarted = false; 
                 isClassStarted = false; // 수업 상태 꺼짐으로 변경
                 sessionScores = [];
+                minuteScoreSum = 0;
+                minuteCount = 0;
               }
             }
           }
