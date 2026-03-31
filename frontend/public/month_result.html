@@ -59,7 +59,7 @@
   <header>
     <a href="/admin_dashboard.html" class="back-btn">< 수업 모니터링</a>
     <div class="logo-text">멋쟁이사자처럼</div>
-    <div class="sub-text">AI NL 5기 과정 - 월간 결과 조회</div>
+    <div class="sub-text">월간 결과 조회</div>
   </header>
 
   <div class="main-container">
@@ -112,7 +112,7 @@
   
   <script>
     // 🌟 1. 현재 날짜 설정 (건우님이 테스트하신 2026년 3월 26일 기준으로 고정해서 먼저 보여줍니다!)
-    let currentDate = new Date(2026, 2, 26); // 연, 월(0=1월), 일
+    let currentDate = new Date(); // 연, 월(0=1월), 일
 
     const calendarBody = document.getElementById('calendarBody');
     const currentMonthTitle = document.getElementById('currentMonthTitle');
@@ -188,7 +188,7 @@
         // 🖱️ 클릭하면 상세 페이지로 날짜 던져주기 (나중에 피그마 설계도대로 그래프 그릴 곳!)
         dayEl.addEventListener('click', () => {
           const formattedDate = `${year}-${(month + 1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
-          window.location.href = `/detail.html?date=${formattedDate}`;
+          window.location.href = `/detail.html?date=${formattedDate}&uid=${currentUid}`;
         });
 
         calendarBody.appendChild(dayEl);
@@ -215,7 +215,7 @@
         
         // 🌟 주간 평균 (2026년 3월 4주차로 건우님이 100점 맞은 그 주를 자동으로 계산!)
         let weekStartDate, weekEndDate;
-        const testDate = new Date(2026, 2, 26); // 건우님이 테스트한 3월 26일
+        const testDate = new Date(currentDate); // 건우님이 테스트한 3월 26일
         
         // 3월 26일이 포함된 주의 일요일~토요일 날짜 구하기
         weekStartDate = new Date(testDate.setDate(testDate.getDate() - testDate.getDay()));
