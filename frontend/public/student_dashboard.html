@@ -247,7 +247,7 @@
       const today = new Date().toISOString().split('T')[0];
       db.collection(COL_COURSES).doc(userDoc.courseId)
         .collection(COL_COURSES_TIMELINE).doc(today)
-        .onSnapshot((doc) => {
+        .onSnapshot(async (doc) => {
           if (doc.exists) {
             isClassStarted = doc.data().isStarted === true;
             if (isClassStarted) {
