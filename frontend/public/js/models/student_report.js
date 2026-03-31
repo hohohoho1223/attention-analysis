@@ -25,14 +25,11 @@ class DailyReport {
 // 상세분석 타임라인용 
   // 1분 간격으로 임시저장 & 10분 간격으로 타임라인 점수(avg) 생성
 class DailyTimeline {
-    constructor(date, uid, tempScore=[], timelineScore = []){
+    constructor(date, uid, timelineScore = []){
       this._date = date;
       this._uid = uid; // 부모 폴더 uid(조회용)
       
-      this.tempScore = tempScore; // 1분 간격 임시 저장 (10분마다 리셋)
-      this.timelineScore = timelineScore; // 10분 간격으로 타임라인 생성
-      // 이후 추가 가능한 지표
-      // absentCount
+      this.timelineScore = timelineScore; // 1분 간격으로 타임라인 생성
     }
     get date() { return this._date; }
     get uid() { return this._uid; }
@@ -71,8 +68,7 @@ const dailyTLConverter = {
     return new DailyTimeline(
       snapshot.id, // date
       data.uid,
-      data.tempScore,
-      data.timelineScore,
+      data.timelineScore || [],
     );
   },
 
@@ -80,7 +76,6 @@ const dailyTLConverter = {
     return { 
       //date = 파일명
       uid: dailyTL.uid, //조회 편의상 추가
-      tempScore: dailyTL.tempScore,
       timelineScore: dailyTL.timelineScore,
     }
   }

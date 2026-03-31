@@ -18,23 +18,30 @@
     
     .container { display: flex; height: calc(100vh - 65px); }
     
+    /* 사이드바 */
     .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; }
-    .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
+    /* 기존 코드에서 아래 코드로 통째로 바꿔치기 해주세요! */
+    .menu-item { 
+        padding: 15px 20px; 
+        font-weight: bold; 
+        color: #555; 
+        cursor: pointer; 
+        transition: 0.2s; 
+        text-decoration: none; /* 밑줄 제거 */
+        display: block; /* 🌟 핵심: 가로 대신 세로로 블록처럼 쌓이게 만듦! */
+    }
     .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
     .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
 
+    /* 메인 컨텐츠 */
     .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; }
     .top-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     
     .course-select { padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 16px; font-weight: bold; }
-    
-    /* ✅ 1단계 UI 미션: 리포트 자동 생성 버튼 디자인 */
-    .report-btn { padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; margin-right: 10px; }
-    .report-btn:hover { background-color: #218838; }
-
     .class-toggle-btn { padding: 10px 20px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; }
     .class-toggle-btn.started { background-color: #dc3545; }
 
+    /* 데이터 테이블 */
     table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
     thead { background-color: #fcfcfc; border-bottom: 2px solid #eee; }
     th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; }
@@ -69,10 +76,13 @@
 
     <div class="main-content">
       <div class="top-controls">
-        <select class="course-select" id="courseSelect"></select>
-        <div style="display: flex;">
-          <button class="report-btn" onclick="alert('리포트 자동생성 기능은 준비 중입니다!')">리포트 자동 생성</button>
+        <select class="course-select" id="courseSelect">수업명</select>
+        <div>
           <button class="class-toggle-btn" id="classToggleBtn">수업 시작</button>
+          <button id="reportBtn" disabled 
+            style="padding:5px 5px; background:#6c757d; color:white; border:none; border-radius:6px; font-weight:bold; cursor:not-allowed; font-size:8px;">
+            임시 리포트 생성버튼 (교체예정)
+          </button>
         </div>
       </div>
 
@@ -84,7 +94,6 @@
             <th>과정명</th>
             <th>상태</th>
             <th>집중도</th>
-            <th>이탈 횟수</th>
             <th>관리</th>
           </tr>
         </thead>
@@ -111,86 +120,35 @@
 
       document.body.style.display = 'block';
 
+      // 고도화 : sessionStorage로 db 매번 읽지 않게 하기
+
       const today = new Date().toISOString().split('T')[0];
       const tbody = document.getElementById('student-table-body');
       const classToggleBtn = document.getElementById('classToggleBtn');
+      const reportBtn = document.getElementById('reportBtn');
       let isClassStarted = false;
+      let hasClassStartedAdmin = false;
+      let fallbackTimer = null; // 2분 동안 수집 대기
       const courseId = userDoc.courseId;
 
       const courseSelect = document.getElementById('courseSelect');
+
       const courses = await CourseCRUD.getCourses();
-
-      // ✅ 2단계 UI 미션: '전체 보기' 옵션 동적 추가
-      const allOption = document.createElement('option');
-      allOption.value = '전체 보기';
-      allOption.textContent = '전체 보기';
-      courseSelect.appendChild(allOption);
-
       courses.forEach(course => {
         const option = document.createElement('option');
         option.value = course.courseId;
         option.textContent = course.courseName;
+        if (course.courseId === courseId) option.selected = true;
         courseSelect.appendChild(option);
       });
 
-      // ✅ 전체 학생 데이터를 담아둘 바구니 생성
-      let studentDataMap = {};
-
-      function renderTable() {
-          tbody.innerHTML = '';
-          const selectedCourse = courseSelect.value;
-          let filteredStudents = [];
-
-          if (selectedCourse === '전체 보기') {
-              Object.values(studentDataMap).forEach(list => {
-                  filteredStudents = filteredStudents.concat(list);
-              });
-          } else {
-              filteredStudents = studentDataMap[selectedCourse] || [];
-          }
-
-          if(filteredStudents.length === 0) {
-              tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
-              return;
-          }
-
-          let count = 1;
-          filteredStudents.forEach((student) => {
-              const tr = document.createElement('tr');
-              let statusClass = 'status-badge';
-              if (student.status === '집중') statusClass += ' status-focus';
-              if (student.status && student.status.includes('졸음')) {
-                  statusClass += ' status-drowsy';
-                  tr.classList.add('row-drowsy');
-              }
-  
-              tr.innerHTML = `
-                  <td>${count++}</td>
-                  <td style="font-weight: bold; color: #FF7710;">${student.name}</td>
-                  <td>${student.course}</td>
-                  <td><span class="${statusClass}">${student.status}</span></td>
-                  <td style="font-weight: bold;">${student.currentScore ?? ''}</td>
-                  <td style="color: #dc3545; font-weight: bold;">0회</td> <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
-              `;
-              tbody.appendChild(tr);
-          });
-      }
-
-      // ✅ DB에 등록된 '모든 과정'을 한꺼번에 구독 (기존 subscribeStudents 대체)
-      courses.forEach(course => {
-          studentDataMap[course.courseId] = [];
-          RealtimeCRUD.subscribeRealtimeList(course.courseId, (list) => {
-              studentDataMap[course.courseId] = list; 
-              renderTable(); 
-          });
-      });
-
-      // 드롭다운 변경 시 UI & 모니터링 보드 업데이트
+      // 드롭다운 변경 시 해당 과정으로 전환
       courseSelect.addEventListener('change', () => {
-        renderTable();
         subscribeBoard(courseSelect.value);
+        subscribeStudents(courseSelect.value);
       });
 
+      // stale 레코드 정리 (전날 생성된 realtime 삭제)
       const realtimeSnapshot = await db
           .collection(COL_COURSES)
           .doc(courseId)
@@ -206,28 +164,43 @@
           }
       });
 
-      let unsubscribeBoard = null;
+      // 모니터링 보드 상태
       function subscribeBoard(targetCourseId) {
         if (unsubscribeBoard) unsubscribeBoard();
-
-        // ✅ '전체 보기' 일 땐 수업 시작 버튼 숨기기
-        if (targetCourseId === '전체 보기') {
-            classToggleBtn.style.display = 'none';
-            return;
-        }
-
-        classToggleBtn.style.display = 'inline-block';
         unsubscribeBoard = db.collection(COL_COURSES).doc(targetCourseId)
           .collection(COL_COURSES_TIMELINE).doc(today)
           .onSnapshot((doc) => {
             if (doc.exists) {
               isClassStarted = doc.data().isStarted === true;
+
+              // 학생의 결과가 모두 모이면 타이머 취소
+              const flushStatus = doc.data().flushStatus;
+              if (flushStatus === 'done' && fallbackTimer) {
+                clearTimeout(fallbackTimer);
+                fallbackTimer = null;
+                reportBtn.textContent = '임시 리포트 생성버튼 (교체예정)';
+                console.log('✅ 정산 완료 - Fallback 타이머 취소');
+              }
+
+
               if (isClassStarted) {
                 classToggleBtn.textContent = '기록 종료';
                 classToggleBtn.classList.add('started');
+                hasClassStartedAdmin = true;
+
+                // ✅ 임시 리포트 버튼 : 기록 중엔 비활성화 
+                reportBtn.disabled = true;
+                reportBtn.style.cursor = 'not-allowed';
+
               } else {
                 classToggleBtn.textContent = '기록 시작';
                 classToggleBtn.classList.remove('started');
+
+                  // ✅ 임시 리포트 버튼 : 한 번이라도 시작됐으면 활성화
+                if (hasClassStartedAdmin) {
+                  reportBtn.disabled = false;
+                  reportBtn.style.cursor = 'pointer';
+                }
               }
             } else {
               isClassStarted = false;
@@ -237,24 +210,107 @@
           });
       }
 
-      // 초기 세팅
-      subscribeBoard(courseSelect.value);
-
-      classToggleBtn.addEventListener('click', () => {
+      classToggleBtn.addEventListener('click', async () => {
           const today = new Date().toISOString().split('T')[0];
           const newState = !isClassStarted;
           const selectedCourseId = courseSelect.value;
           
-          if (selectedCourseId === '전체 보기') return; // 예방
+          if (!newState) { // 종료 시
+            // isStarted: false 와 flushStatus: 'waiting' 동시에 세팅
+            const realtimeSnap = await db.collection(COL_COURSES)
+              .doc(selectedCourseId).collection('realtime').get();
 
-          db.collection(COL_COURSES).doc(selectedCourseId)
-            .collection(COL_COURSES_TIMELINE).doc(today)
-            .set({ isStarted: newState }, { merge: true })
-            .then(() => console.log('[ADMIN] timeline set success'))
-            .catch(err => console.error('[ADMIN] timeline set fail:', err));
-      });
+            await db.collection(COL_COURSES).doc(selectedCourseId)
+              .collection(COL_COURSES_TIMELINE).doc(today)
+              .set({ isStarted: false }, { merge: true });
 
+            console.log('[ADMIN] 종료 클릭', { selectedCourseId, today, isClassStarted });
+
+            await CourseTLCRUD.prepareFinalization(selectedCourseId, today, realtimeSnap.size);
+            console.log('[ADMIN] prepareFinalization 완료');
+
+          } else { // 시작 시
+            db.collection(COL_COURSES).doc(selectedCourseId)
+              .collection(COL_COURSES_TIMELINE).doc(today)
+              .set({ isStarted: true }, { merge: true });
+
+              
+          }
+        });
+      // classToggleBtn.addEventListener('click', () => {
+      //     const today = new Date().toISOString().split('T')[0];
+      //     const newState = !isClassStarted;
+      //     const selectedCourseId = courseSelect.value;
+          
+      //     db.collection(COL_COURSES).doc(selectedCourseId)
+      //       .collection(COL_COURSES_TIMELINE).doc(today)
+      //       .set({ isStarted: newState }, { merge: true })
+      //       .then(() => console.log('[ADMIN] timeline set success'))
+      //       .catch(err => console.error('[ADMIN] timeline set fail:', err));
+      // });
+
+      let unsubscribeBoard = null;
+      let unsubscribe = null;
+  
+      function subscribeStudents(courseId) {
+        if (unsubscribe) unsubscribe();
+        unsubscribe = RealtimeCRUD.subscribeRealtimeList(courseId, (list) => {
+          tbody.innerHTML = '';
+          if(list.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="6" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
+              return;
+          }
+  
+          let count = 1;
+          list.forEach((student) => {
+              const tr = document.createElement('tr');
+              
+              let statusClass = 'status-badge';
+              if (student.status === '집중') statusClass += ' status-focus';
+              if (student.status && student.status.includes('졸음')) {
+                  statusClass += ' status-drowsy';
+                  tr.classList.add('row-drowsy');
+              }
+  
+              tr.innerHTML = `
+                  <td>${count++}</td>
+                  <td style="font-weight: bold; color: #FF7710;">${student.name}</td>
+                  <td>${student.course}</td>
+                  <td><span class="${statusClass}">${student.status}</span></td>
+                  <td style="font-weight: bold;">${student.currentScore ?? ''}</td>
+                  <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
+              `;
+              tbody.appendChild(tr);
+          });
+        });
+      }
+
+      // ✅ 임시 리포트 버튼 : 이벤트
+      reportBtn.addEventListener('click', async () => {
+        const today = new Date().toISOString().split('T')[0];
+        const selectedCourseId = courseSelect.value;
+
+        // 버튼 비활성화 (중복 클릭 방지)
+        reportBtn.disabled = true;
+        reportBtn.textContent = '생성 중...';
+        reportBtn.style.cursor = 'not-allowed';
+
+        // 접속자 수 카운트 후 정산 시작
+        const realtimeSnap = await db.collection(COL_COURSES)
+          .doc(selectedCourseId).collection('realtime').get();
+        await CourseTLCRUD.prepareFinalization(selectedCourseId, today, realtimeSnap.size);
+
+        // Fallback 타이머 (2분)
+        if (fallbackTimer) clearTimeout(fallbackTimer);
+        fallbackTimer = setTimeout(async () => {
+          console.warn('⚠️ Fallback 실행');
+          await CourseTLCRUD.finalizeCourseAverage(selectedCourseId, today);
+        }, 60000 * 2);
+      });console.log('[ADMIN] 종료 클릭', { selectedCourseId, today, isClassStarted });
+
+        subscribeBoard(courseSelect.value);
+        subscribeStudents(courseSelect.value);
     });
-  </script>
+      </script>
 </body>
 </html>

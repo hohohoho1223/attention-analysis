@@ -62,9 +62,11 @@
   <script src="/js/models/user.js"></script>
   <script src="/js/models/admin_realtime.js"></script>
   <script src="/js/models/student_report.js"></script>
+  <script src="/js/models/course.js"></script>
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/student_report.js"></script>
   <script src="/js/crud/admin_realtime.js"></script>
+  <script src="/js/crud/course.js"></script>
   <script src="/js/ai_logic.js"></script>
 
   <script>
@@ -92,14 +94,27 @@
     let aiInterval = null;
     let userDoc = null;
     let realtimeStatus = null;
-    let sessionScores = [];
     let continuousFail = 0; 
-
-    let tempInterval = null; 
+    
+    // 분석 데이터 저장용
+    let sessionScores = [];
+    let updateTimeline = []; 
+    let classStartTime = null;
+    let secondInterval = null;
     let timelineInterval = null;
 
     let latestAttentionState = new RemoteAttentionState();
     let isRemoteAnalyzing = false;
+
+    // 트랜잭션 순환 방지
+    let hasFinalized = false;
+
+    function toHHMMSS(seconds) {
+        const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+        const s = String(seconds % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
 
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
@@ -190,6 +205,7 @@
     let today = new Date().toISOString().split('T')[0];  
 
     auth.onAuthStateChanged(async (user) => {
+
       if (!user) {
         window.location.href = '/';
         return;
@@ -242,11 +258,13 @@
           if (doc.exists) {
             isClassStarted = doc.data().isStarted === true;
             if (isClassStarted) {
+              classStartTime = classStartTime ?? new Date(); // 수업시작시간 체크 (최초 1회)
               hasClassStarted = true; 
               waitingOverlay.style.opacity = '0';
               setTimeout(() => {
                 waitingOverlay.style.display = 'none';
               }, 500);
+              hasClassStarted = true;
             } else {
               waitingOverlay.style.display = 'flex';
               setTimeout(() => {
@@ -254,7 +272,7 @@
               }, 10);
               realtimeStatus.status = '대기중';
               realtimeStatus.currentScore = null;
-              RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+              await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
 
               if (hasClassStarted) { 
                 await finalizeSession({
@@ -265,22 +283,32 @@
                   realtimeStatus,
                   sessionScores
                 });
-                hasClassStarted = false; 
-                isClassStarted = false; 
-                sessionScores = [];
               }
             }
           }
         });
 
       console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
-
-      tempInterval = setInterval(async () => {
+      
+      // 5초마다 updateTimeline에 점수 누적
+      secondInterval = setInterval(async () => {
         if (!isClassStarted || sessionScores.length === 0) return;
-        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-        const isSuccess = await DailyTLCRUD.addTempScore(currentUser.uid, today, avg);
+        if (isClassStarted && latestAttentionState) {
+          const elapsed = Math.floor((new Date() - classStartTime) / 1000); // 경과 초
+          const timeKey = toHHMMSS(elapsed); // 00:00:00
+          const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+    
+          updateTimeline.push({ t: timeKey, v: avg });
+        }
+      }, 5000);
+
+      // 1분마다 db 전송
+      timelineInterval = setInterval(async () => {
+        if (!isClassStarted || updateTimeline.length === 0) return;
+        const isSuccess = await DailyTLCRUD.addBulkScoresToList(currentUser.uid, today, updateTimeline);
 
         if (isSuccess) {
+          updateTimeline = [];
           continuousFail = 0;
         } else {
           continuousFail += 1;
@@ -291,7 +319,7 @@
               realtimeStatus.currentScore = null;
               await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
             }
-            clearInterval(tempInterval);
+            clearInterval(secondInterval);
             clearInterval(timelineInterval);
             clearInterval(aiInterval);
 
@@ -302,33 +330,62 @@
         }
       }, 60000);
 
-      timelineInterval = setInterval(async () => {
-        if (!isClassStarted) return;
-        const today = new Date().toISOString().split('T')[0];
-        await DailyTLCRUD.updateToTimeline(user.uid, today);
-      }, 600000);
     });
 
-    async function finalizeSession({ userId, courseId, today, userDoc, realtimeStatus, sessionScores }) {
-      if (sessionScores.length > 0) {
-        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-        await DailyTLCRUD.addTempScore(userId, today, avg);
-      }
-      await DailyTLCRUD.updateTimelineScore(userId, today);
-      const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
-      await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
+    // admin에서 수업 종료
+    async function finalizeSession({
+      userId,
+      courseId,
+      today,
+      userDoc,
+      realtimeStatus,
+      sessionScores
+    }) {
+      if (hasFinalized) return;
+      hasFinalized = true;
 
-      if (aiInterval) clearInterval(aiInterval); 
-      if (tempInterval) clearInterval(tempInterval); 
-      if (timelineInterval) clearInterval(timelineInterval); 
+      try{
+
+          // 1. 1분 미만 값이어도 임시 저장
+          if (sessionScores.length > 0) {
+            const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+            await DailyTLCRUD.addTempScore(userId, today, avg);
+          }
+    
+          // 2. 타임라인 정산
+          await DailyTLCRUD.updateTimelineScore(userId, today);
+    
+          // 3. totalScore 계산 및 daily_report 저장
+          const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
+          await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
+          await CourseTLCRUD.completeStudentReport(courseId, today, userId);
+    
+          // 모든 타이머 중지
+          if (aiInterval) clearInterval(aiInterval); // AI
+          if (secondInterval) clearInterval(secondInterval); // 5초 저장
+          if (timelineInterval) clearInterval(timelineInterval); // 1분 저장
+
+          // 리셋
+          hasClassStarted = false; 
+          isClassStarted = false; // 수업 상태 꺼짐으로 변경
+          classStartTime = null; // 수업 시작 시간 리셋
+          sessionScores = [];
+
+        }catch(e){
+          console.error(e);
+          hasFinalized = false;
+        }
+
     }
 
+    // 브라우저 닫으면 리스트에서 제거
     window.addEventListener('beforeunload', () => {
         if (realtimeStatus && userDoc && currentUser) {
             db.collection(COL_COURSES).doc(userDoc.courseId)
               .collection('realtime').doc(currentUser.uid)
               .delete();
-        }
+         }
+        // 웹캠 정지
         if (videoElement.srcObject) {
           videoElement.srcObject.getTracks().forEach(track => track.stop());
         }

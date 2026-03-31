@@ -20,7 +20,7 @@ class Course {
 
 // 수업별 타임라인
 class CourseTimeline {
-    constructor(date, isStarted, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
+    constructor(date, isStarted, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0, flushStatus = 'waiting', expectedCount = 0, completedUids = []){
         this._date = date;
 
         this.isStarted = isStarted;
@@ -29,6 +29,9 @@ class CourseTimeline {
         this.minScore = minScore;
         this.timelineScore = timelineScore;
         this.studentCount = studentCount;
+        this.flushStatus = flushStatus;     // 'waiting' | 'calculating' | 'done'
+        this.expectedCount = expectedCount; // 수업 종료 시점 접속자 수
+        this.completedUids = completedUids; // 저장 완료한 학생 uid 배열
     } 
     get date() { return this._date; }
 }
@@ -40,9 +43,9 @@ const courseConverter = {
         return new Course(
             snapshot.id, 
             data.courseName,
-      data.instructor,
-      data.isActive ?? true,
-      data.createdAt || null,
+            data.instructor,
+            data.isActive ?? true,
+            data.createdAt || null,
     );
   },
 
@@ -68,6 +71,9 @@ const courseTLConverter = {
       data.minScore || 0,
       data.timelineScore || [],
       data.studentCount || 0,
+      data.flushStatus || 'waiting',  
+      data.expectedCount || 0,        
+      data.completedUids || [],       
     );
   },
 
@@ -80,6 +86,9 @@ const courseTLConverter = {
       minScore: courseTL.minScore,
       timelineScore: courseTL.timelineScore,
       studentCount: courseTL.studentCount,
+      flushStatus: courseTL.flushStatus,     
+      expectedCount: courseTL.expectedCount, 
+      completedUids: courseTL.completedUids, 
     }
   }
 }
