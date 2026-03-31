@@ -9,7 +9,7 @@ import base64
 import io
 from collections import deque
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 import cv2
 import mediapipe as mp
@@ -393,44 +393,78 @@ async def health() -> dict:
     return {'status': 'ok'}
 
 
+# @app.post('/predict')
+# async def predict(req: PredictionRequest) -> dict:
+#     defense_model = load_shared_defense_model(True)
+#     if defense_model is None:
+#         raise HTTPException(status_code=500, detail='CNN 방어막 모델이 로드되지 않았습니다.')
+
+#     left = decode_crop_image(req.left_eye)
+#     right = decode_crop_image(req.right_eye)
+#     mouth = decode_crop_image(req.mouth)
+
+#     batch = np.stack([left, right, mouth])
+#     preds = defense_model.predict(batch, verbose=0)
+
+#     p_left = float(preds[0][1])
+#     p_right = float(preds[1][1])
+#     p_mouth = float(preds[2][1])
+#     max_prob = max(p_left, p_right, p_mouth)
+
+#     return {
+#         'prob': max_prob,
+#         'left_eye': p_left,
+#         'right_eye': p_right,
+#         'mouth': p_mouth,
+#     }
+
+
 @app.post('/predict')
-async def predict(req: PredictionRequest) -> dict:
-    defense_model = load_shared_defense_model(True)
-    if defense_model is None:
-        raise HTTPException(status_code=500, detail='CNN 방어막 모델이 로드되지 않았습니다.')
+async def predict(payload: Dict[str, Any]) -> dict:
+    # 1) main_before 전체 분석 경로: frame 1장 전달
+    if 'frame' in payload:
+        req = AnalyzeFrameRequest(**payload)
+        try:
+            frame_bgr = decode_base64_image(req.frame)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f'프레임 디코딩 실패: {exc}') from exc
 
-    left = decode_crop_image(req.left_eye)
-    right = decode_crop_image(req.right_eye)
-    mouth = decode_crop_image(req.mouth)
+        session = get_session(req)
+        try:
+            return session.analyze_frame(frame_bgr, fps=req.fps)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f'프레임 분석 실패: {exc}') from exc
 
-    batch = np.stack([left, right, mouth])
-    preds = defense_model.predict(batch, verbose=0)
+    # 2) 구형 CNN 확률 추론 경로: left_eye/right_eye/mouth 3장 전달
+    if all(k in payload for k in ('left_eye', 'right_eye', 'mouth')):
+        req = PredictionRequest(**payload)
+        defense_model = load_shared_defense_model(True)
+        if defense_model is None:
+            raise HTTPException(status_code=500, detail='CNN 방어막 모델이 로드되지 않았습니다.')
 
-    p_left = float(preds[0][1])
-    p_right = float(preds[1][1])
-    p_mouth = float(preds[2][1])
-    max_prob = max(p_left, p_right, p_mouth)
+        left = decode_crop_image(req.left_eye)
+        right = decode_crop_image(req.right_eye)
+        mouth = decode_crop_image(req.mouth)
 
-    return {
-        'prob': max_prob,
-        'left_eye': p_left,
-        'right_eye': p_right,
-        'mouth': p_mouth,
-    }
+        batch = np.stack([left, right, mouth])
+        preds = defense_model.predict(batch, verbose=0)
 
+        p_left = float(preds[0][1])
+        p_right = float(preds[1][1])
+        p_mouth = float(preds[2][1])
+        max_prob = max(p_left, p_right, p_mouth)
 
-@app.post('/analyze')
-async def analyze(req: AnalyzeFrameRequest) -> dict:
-    try:
-        frame_bgr = decode_base64_image(req.frame)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f'프레임 디코딩 실패: {exc}') from exc
+        return {
+            'prob': max_prob,
+            'left_eye': p_left,
+            'right_eye': p_right,
+            'mouth': p_mouth,
+        }
 
-    session = get_session(req)
-    try:
-        return session.analyze_frame(frame_bgr, fps=req.fps)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f'프레임 분석 실패: {exc}') from exc
+    raise HTTPException(
+        status_code=422,
+        detail='요청 본문 형식이 올바르지 않습니다. frame 또는 left_eye/right_eye/mouth 가 필요합니다.',
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
