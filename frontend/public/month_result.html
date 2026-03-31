@@ -130,6 +130,18 @@
 
       const firstDay = new Date(year, month, 1).getDay(); // 이번 달 1일이 무슨 요일?(0~6)
       const daysInMonth = new Date(year, month + 1, 0).getDate(); // 이번 달 며칠까지 있어?
+
+      ////// db 테스트 (테스트 후 삭제해주세요) : 형식 00-00-00
+      console.log("조회 범위:", firstDay, daysInMonth);
+
+      const snapshot = await db.collection(COL_USERS).doc(uid)
+        .collection(COL_DAILY_REPORT)
+        .get();
+
+      snapshot.forEach(doc => {
+        console.log("🔥 실제 데이터:", doc.id, doc.data());
+      });
+      ////////////
       
       // 🌟 데이터베이스에서 이번 달 하루치 데이터 싹 긁어오기! (엄청난 기능 🚀)
       let dailyDataList = {};
@@ -150,6 +162,7 @@
           if (year === 2026 && month === 2 && dailyDataList[26]) {
               console.log(`✅ 대박! 어제 저장한 26일 100점 데이터를 성공적으로 읽어왔습니다!`);
           }
+
 
       } catch (error) {
           console.error("데이터 로딩 중 에러:", error);
@@ -253,12 +266,64 @@
       renderCalendar(currentUid);
     });
 
+    ///////////DB 더미데이터(이후 실제데이터 연결되면 삭제)
+
+    async function seedDummyData(uid) {
+        console.log("더미 데이터 생성 시작");
+
+        const testData = [
+          { date: '2026-03-20', score: 55 },
+          { date: '2026-03-21', score: 65 },
+          { date: '2026-03-22', score: 72 },
+          { date: '2026-03-23', score: 80 },
+          { date: '2026-03-24', score: 90 },
+          { date: '2026-03-25', score: 85 },
+          { date: '2026-03-26', score: 95 },
+          { date: '2026-03-27', score: 70 },
+          { date: '2026-03-28', score: 60 }
+        ];
+
+        for (const d of testData) {
+          await db.collection('users').doc(uid)
+            .collection('daily_report').doc(d.date)
+            .set({
+              name: '테스트',
+              courseName: '미정',
+              grade: StudentReportCRUD.calculateGrade(d.score),
+              totalScore: d.score,
+              absentCount: 0,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        console.log("더미 데이터 생성 완료");
+      }
+
+      ///////////////////////
+
     // 🌟 대망의 첫 달력 그리기! (어제 성공의 달콤한 열매를 맛볼 시간입니다 🍒)
     let currentUid = null;
     auth.onAuthStateChanged(async (user) => {
-      if (!user) { window.location.href = '/'; return; }
-      currentUid = user.uid;
-      renderCalendar(currentUid);
+      // if (!user) { window.location.href = '/'; return; }
+      // currentUid = user.uid;
+      // renderCalendar(currentUid);
+
+
+      //////////더미데이터 삽입 (더미데이터)
+      if (!user) return;
+      const uid = user.uid;
+
+      try {
+        await seedDummyData(uid);
+      } catch (e) {
+        console.error("더미 삽입 실패:", e);
+      }
+
+      renderCalendar(uid);
+
+      /////////////
+
+
     });
 
   </script>
