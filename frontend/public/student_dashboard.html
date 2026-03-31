@@ -66,7 +66,7 @@
   <div id="webcam-section">
     <div class="welcome-msg">
       🦁 <span id="display-name"></span>님 환영합니다!
-      <button class="exit-btn" id="exitBtn">수업 나가기</button>
+      <!-- <button class="exit-btn" id="exitBtn">수업 나가기</button> -->
     </div>
     <div class="video-container">
       <video id="webcam" autoplay playsinline muted></video>
@@ -112,7 +112,13 @@
     let isCnnProcessing = false; 
     let cnnProbBuffer = [];      
     let isDrowsy = false;        
-    // sessionScore 삭제
+    let sessionScores = [];
+    let continuousFail = 0; // 연속 저장 실패 횟수
+    
+    // 임시저장(1분) 및 타임라인(10분)
+    let tempInterval = null; // 1분
+    let timelineInterval = null; // 10분
+    
 
     function getCropBase64(video, landmarks, indices, pad, width, height) {
         let xs = indices.map(i => landmarks[i].x * width);
@@ -178,6 +184,12 @@
                     // 🌟 설계도 기준 0.7
                     isDrowsy = smoothProb > 0.7; 
                     isCnnProcessing = false; 
+
+                    console.log('[DROWSY]', {
+                      maxProb,
+                      smoothProb,
+                      isDrowsy
+                    });
                 }).catch(err => { isCnnProcessing = false; });
             }
         }
@@ -186,9 +198,8 @@
       // AI 분석 결과 도출 시
       const attentionState = attentionAnalyzer.update(poseAngles, 0.0, faceDetected, dt, eyeResult, isDrowsy);
       if (isClassStarted && !isNaN(attentionState.score)) { 
-        // 1분 합산용 변수에 기록
-        minuteScoreSum += attentionState.score;
-        minuteCount++;
+        sessionScores.push(attentionState.score); 
+
       }
 
       if (realtimeStatus && isClassStarted) {
@@ -199,22 +210,22 @@
         else if (attentionState.state === "ABSENT") statusKOR = "자리비움";
         else if (attentionState.state === "DROWSY") statusKOR = "🚨 졸음 🚨"; 
 
+        // 순간 점수 대신 버퍼 평균으로 스무딩
+        const displayScore = sessionScores.length > 0
+          ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length)
+          : 0;
+
         realtimeStatus.status = statusKOR;
-        realtimeStatus.currentScore = Math.round(attentionState.score);
+        realtimeStatus.currentScore = displayScore;
         await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
       }
       canvasCtx.restore();
     });
         
 
-    // 임시저장(1분) 및 타임라인(10분)
-    let tempInterval = null; // 1분
-    let timelineInterval = null; // 10분
-    
-    // 1분 단위 저장용 변수
-    let minuteScoreSum = 0; // 1분 동안 점수 합계
-    let minuteCount = 0; // 1분 동안 쌓인 데이터 개수
-    let continuousFail = 0; // 연속 저장 실패 횟수
+
+    // 오늘 날짜
+    let today = new Date().toISOString().split('T')[0];  
 
     auth.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = '/'; return; }
@@ -252,13 +263,16 @@
         }
       }, 500); 
 
-      const today = new Date().toISOString().split('T')[0];      
+      let hasClassStarted = false; // 수업이 한 번이라도 시작했는지
+
+
       db.collection(COL_COURSES).doc(userDoc.courseId)
       .collection(COL_COURSES_TIMELINE).doc(today)
-      .onSnapshot((doc) => {
+      .onSnapshot(async (doc) => {
         if (doc.exists) {
           isClassStarted = doc.data().isStarted === true;
           if (isClassStarted) {
+            hasClassStarted = true;
             waitingOverlay.style.opacity = '0'; 
             setTimeout(() => { waitingOverlay.style.display = 'none'; }, 500);
           } else {
@@ -267,18 +281,35 @@
             realtimeStatus.status = '대기중';
             realtimeStatus.currentScore = null;
             RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+
+            if (hasClassStarted) { // 한 번이라도 시작됐을 때만 정산
+              await finalizeSession({
+                userId: currentUser?.uid,
+                courseId: userDoc?.courseId,
+                today,
+                userDoc,
+                realtimeStatus,
+                sessionScores
+              });
+
+              // 리셋
+              hasClassStarted = false; 
+              isClassStarted = false; // 수업 상태 꺼짐으로 변경
+              sessionScores = [];
+            }
           }
         }
       });
 
       // 1분 타이머(임시저장)
+      console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
+
       tempInterval = setInterval(async () => {
-        if (!isClassStarted || minuteCount === 0) return;
 
-        const avg = Math.round(minuteScoreSum / minuteCount);
-        const today = new Date().toISOString().split('T')[0];
+        if (!isClassStarted || sessionScores.length === 0) return;
 
-        const isSuccess = await DailyTLCRUD.addTempScore(user.uid, today, avg);
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        const isSuccess = await DailyTLCRUD.addTempScore(currentUser.uid, today, avg);
 
         if (isSuccess) {
             continuousFail = 0;
@@ -308,33 +339,44 @@
                 waitingOverlay.textContent = "네트워크 오류로 분석이 중단되었습니다. 새로고침이 필요합니다. 🔌";
                 }
         }
-
-        // 리셋 (실패 시에는 1분 누락)
-        minuteScoreSum = 0;
-        minuteCount = 0;
-
       }, 60000);
 
       // 10분 타이머(타임라인)
       timelineInterval = setInterval(async () => {
           if (!isClassStarted) return;
-          const today = new Date().toISOString().split('T')[0];
-          await DailyTLCRUD.updateToTimeline(user.uid, today);
+          await DailyTLCRUD.updateTimelineScore(currentUser.uid, today);
       }, 600000);
 
     });
 
     // admin에서 수업 종료
-    //   if (confirm("수업을 종료하시겠습니까? (데이터가 저장됩니다)")) {
-      // // 모든 타이머 중지
-      // if (aiInterval) clearInterval(aiInterval); // AI
-      // if (tempInterval) clearInterval(tempInterval); // 1분 저장
-      // if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
-  
-      // // 합산 변수 초기화
-      // minuteScoreSum = 0;
-      // minuteCount = 0;
-      // isClassStarted = false; // 수업 상태 꺼짐으로 변경
+    async function finalizeSession({
+      userId,
+      courseId,
+      today,
+      userDoc,
+      realtimeStatus,
+      sessionScores
+    }) {
+      // 1. 1분 미만 값이어도 임시 저장
+      if (sessionScores.length > 0) {
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        await DailyTLCRUD.addTempScore(userId, today, avg);
+      }
+
+      // 2. 타임라인 정산
+      await DailyTLCRUD.updateTimelineScore(userId, today);
+
+      // 3. totalScore 계산 및 daily_report 저장
+      const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
+      await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
+
+      // 모든 타이머 중지
+      if (aiInterval) clearInterval(aiInterval); // AI
+      if (tempInterval) clearInterval(tempInterval); // 1분 저장
+      if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
+    }
+
 
     // 브라우저 창을 닫으면 realtime 삭제
     window.addEventListener('beforeunload', () => {
@@ -343,22 +385,27 @@
               .collection('realtime').doc(currentUser.uid)
               .delete();
         }
+
+        // 웹캠 정지
+        if (videoElement.srcObject) {
+          videoElement.srcObject.getTracks().forEach(track => track.stop());
+        }
     });
 
       
-    // 삭제 예정
-    exitBtn.addEventListener('click', async () => {
-        // 대기열 삭제
-        if (realtimeStatus) await realtimeStatus.delete();
+    // 삭제 
+    // exitBtn.addEventListener('click', async () => {
+    //     // 대기열 삭제
+    //     if (realtimeStatus) await realtimeStatus.delete();
         
-        // 웹캠 정지
-        if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
+    //     // 웹캠 정지
+    //     if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
         
-        // 화면 전환
-        webcamSection.style.display = 'none';
-        endSection.style.display = 'flex'
+    //     // 화면 전환
+    //     webcamSection.style.display = 'none';
+    //     endSection.style.display = 'flex'
 
-    });
+    // });
 
     // window.addEventListener('unload', () => { if (realtimeStatus) realtimeStatus.delete(); });
   
