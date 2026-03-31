@@ -76,8 +76,14 @@
     const inputSection = document.getElementById('input-section'); // 학생일 시 이름/과정명 입력
     let currentUser = null; // user 저장용
 
+    auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+      .catch((error) => {
+        console.error('persistence 설정 실패:', error);
+      });
+
     // 🌟 로그인 및 관리자/학생 권한 분기 로직
     document.getElementById('googleLoginBtn').addEventListener('click', () => {
+      googleProvider.setCustomParameters({ prompt: 'select_account' });
       auth.signInWithPopup(googleProvider)
         .then(async (result) => {
           currentUser = result.user;

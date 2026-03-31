@@ -175,9 +175,13 @@
       classToggleBtn.addEventListener('click', () => {
           const today = new Date().toISOString().split('T')[0];
           const newState = !isClassStarted;
-          db.collection(COL_COURSES).doc(courseId)
+          const selectedCourseId = courseSelect.value;
+          
+          db.collection(COL_COURSES).doc(selectedCourseId)
             .collection(COL_COURSES_TIMELINE).doc(today)
-            .set({ isStarted: newState }, { merge: true });
+            .set({ isStarted: newState }, { merge: true })
+            .then(() => console.log('[ADMIN] timeline set success'))
+            .catch(err => console.error('[ADMIN] timeline set fail:', err));
       });
   
       let unsubscribe = null;
