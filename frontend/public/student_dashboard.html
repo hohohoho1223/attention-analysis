@@ -126,7 +126,6 @@
       console.log('[onResults]', {
         readyState: videoElement.readyState,
         isClassStarted,
-        score: latestAttentionState?.score,
         sessionLen: sessionScores.length
       });
 
@@ -150,17 +149,10 @@
         remoteAttentionEngine.analyzeFrame(videoElement, 2.0)
           .then((state) => {
             latestAttentionState = state;
-
-            console.log('[RemoteAttentionEngine] state', {
-              state: state.state,
-              score: state.score,
-              absent_count: state.absent_count,
-              no_face: state.durations?.no_face,
-              face_detected: state.face_detected
-            });
+            console.log('[RemoteAttentionState]', state);
           })
           .catch((err) => {
-            console.error('[RemoteAttentionEngine] analyzeFrame failed', err);
+            console.error('[AI ERROR]analyzeFrame failed', err);
           })
           .finally(() => {
             isRemoteAnalyzing = false;
