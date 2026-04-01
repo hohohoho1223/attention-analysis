@@ -92,15 +92,23 @@ var CourseTLCRUD = {
     // 2. 과정별 전체 학생의 타임라인 점수 조회 (필터링 포함)
     getStudentTimelines: async function(courseId, date) {
         try {
-            const snap = await db.collection(COL_COURSES).doc(courseId)
-                                 .collection(COL_COURSES_TIMELINE).doc(date).get();
-            const uids = snap.data()?.completedUids ?? [];
-            if (uids.length === 0) return [];
+              const snap = await db.collection(COL_COURSES).doc(courseId)
+                             .collection(COL_COURSES_TIMELINE).doc(date).get();
+        
+        console.log('[getStudentTimelines] snap.exists:', snap.exists);
+        console.log('[getStudentTimelines] snap.data():', snap.data());
+        
+        const uids = snap.data()?.completeStudents ?? [];
+        console.log('[getStudentTimelines] completeStudents uids:', uids);
+        
+        if (uids.length === 0) return [];
 
-            const allTimelines = await Promise.all(
-                uids.map(uid => StudentReportCRUD.getTimelineScore(uid, date))
-            );
-            return allTimelines.filter(tl => tl && tl.length > 0);
+        const allTimelines = await Promise.all(
+            uids.map(uid => StudentReportCRUD.getTimelineScore(uid, date))
+        );
+        console.log('[getStudentTimelines] allTimelines:', allTimelines);
+        
+        return allTimelines.filter(tl => tl && tl.length > 0);
         } catch (e) {
             console.error("❌ 타임라인 수집 실패:", e);
             return [];

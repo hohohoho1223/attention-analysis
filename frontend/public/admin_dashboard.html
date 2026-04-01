@@ -209,7 +209,6 @@
       });
 
       let unsubscribeBoard = null;
-      let fallbackTimer = null;
 
       function subscribeBoard(targetCourseId) {
         if (unsubscribeBoard) unsubscribeBoard();
@@ -226,15 +225,6 @@
           .onSnapshot((doc) => {
             if (doc.exists) {
               isClassStarted = doc.data().isStarted === true;
-
-              // 학생의 결과가 모두 모이면 타이머 취소
-              const flushStatus = doc.data().flushStatus;
-              if (flushStatus === 'done' && fallbackTimer) {
-                clearTimeout(fallbackTimer);
-                fallbackTimer = null;
-                reportBtn.textContent = '임시 리포트 생성버튼 (교체예정)';
-                console.log('✅ 정산 완료 - Fallback 타이머 취소');
-              }
 
 
               if (isClassStarted) {
@@ -276,34 +266,27 @@
           
           if (selectedCourseId === '전체 보기') return; // 예방
 
-          db.collection(COL_COURSES).doc(selectedCourseId)
+          await db.collection(COL_COURSES).doc(selectedCourseId)
             .collection(COL_COURSES_TIMELINE).doc(today)
-            .set({ isStarted: newState }, { merge: true })
-            .then(() => console.log('[ADMIN] timeline set success'))
-            .catch(err => console.error('[ADMIN] timeline set fail:', err));
+            .set({ isStarted: newState }, { merge: true });
+          console.log('[ADMIN] 기록 ' + (newState ? '시작' : '종료'), { selectedCourseId, today });
             
+          // if (!newState) { // 종료 시
+          //   // isStarted: false 와 flushStatus: 'waiting' 동시에 세팅
+          //   const realtimeSnap = await db.collection(COL_COURSES)
+          //     .doc(selectedCourseId).collection('realtime').get();
+              
+          //     await db.collection(COL_COURSES).doc(selectedCourseId)
+          //     .collection(COL_COURSES_TIMELINE).doc(today)
+          //     .set({ isStarted: false }, { merge: true });
+              
+          //     console.log('[ADMIN] 종료 클릭', { selectedCourseId, today, isClassStarted });
             
-            if (!newState) { // 종료 시
-              // isStarted: false 와 flushStatus: 'waiting' 동시에 세팅
-            const realtimeSnap = await db.collection(COL_COURSES)
-              .doc(selectedCourseId).collection('realtime').get();
-              
-              await db.collection(COL_COURSES).doc(selectedCourseId)
-              .collection(COL_COURSES_TIMELINE).doc(today)
-              .set({ isStarted: false }, { merge: true });
-              
-              console.log('[ADMIN] 종료 클릭', { selectedCourseId, today, isClassStarted });
-              
-              await CourseTLCRUD.prepareFinalization(selectedCourseId, today, realtimeSnap.size);
-              console.log('[ADMIN] prepareFinalization 완료');
-              
-            } else { // 시작 시
-              db.collection(COL_COURSES).doc(selectedCourseId)
-              .collection(COL_COURSES_TIMELINE).doc(today)
-              .set({ isStarted: true }, { merge: true });
-              
-              
-            }
+          // } else { // 시작 시
+          //   db.collection(COL_COURSES).doc(selectedCourseId)
+          //   .collection(COL_COURSES_TIMELINE).doc(today)
+          //   .set({ isStarted: true }, { merge: true });
+          // }
       
           });
       
@@ -312,17 +295,7 @@
               const today = new Date().toISOString().split('T')[0];
               const selectedCourseId = courseSelect.value;
       
-              // 버튼 비활성화 (중복 클릭 방지)
-              reportBtn.disabled = true;
-              reportBtn.textContent = '생성 중...';
-              reportBtn.style.cursor = 'not-allowed';
-      
-              // 접속자 수 카운트 후 정산 시작
-              const realtimeSnap = await db.collection(COL_COURSES)
-                .doc(selectedCourseId).collection('realtime').get();
-              await CourseTLCRUD.prepareFinalization(selectedCourseId, today, realtimeSnap.size);
-              
-              subscribeBoard(courseSelect.value);
+              window.location.href = `/course_timeline.html?date=${today}`;
             });
         });
 
