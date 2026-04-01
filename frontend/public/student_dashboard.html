@@ -334,7 +334,7 @@
             isRemoteAnalyzing = false;
           }
         }
-      }, SERVER_ANALYZE_INTERVAL_MS); // 서버 분석은 별도 약 15fps로 분리
+      }, SERVER_ANALYZE_INTERVAL_MS); // 서버 분석은 별도 약 10fps로 분리
 
       let hasClassStarted = false; 
 
@@ -423,6 +423,7 @@
           if (!isClassStarted || sessionScores.length === 0) return;
           const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
           updateTimeLine.push(avg);
+          sessionScores = [];
           console.log('[COLLECT] 10초 수집 →', avg, '| 버퍼:', updateTimeLine.length);
       }, 10000);
 
@@ -475,6 +476,7 @@
       if (sessionScores.length > 0 && classStartTime) {
         const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
         updateTimeLine.push(avg);
+        sessionScores = [];
         await db.collection('users').doc(userId)
           .collection('daily_timeline').doc(today)
           .set({
