@@ -12,105 +12,141 @@
   <style>
     /* 전체 드래그 방지 */
     body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
-    /* 입력창은 예외 */
     input, textarea { user-select: text; }
-    /* 🎨 멋사 시그니처 테마 */
+    
     body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; min-height: 100vh; }
-    /* ✅ admin_dashboard와 통일된 헤더 */
     header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
     .logo-area { display: flex; align-items: center; gap: 15px; }
     .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
     .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
-    /* ✅ 우측: 환영 텍스트 + 로그아웃 */
     .header-right { display: flex; align-items: center; gap: 12px; }
     .welcome-text { font-size: 13px; color: #888; }
     .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px; }
     #sidebarToggleBtn { background: none; border: none; font-size: 20px; cursor: pointer; color: #555; }
-    /* ✅ 전체 레이아웃 */
+    
     .layout { display: flex; height: calc(100vh - 65px); }
-    /* 🌟 왼쪽 사이드바 */
     .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap; }
     .sidebar.collapsed { width: 10px; padding: 0; }
     .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
     .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
     .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
-    /* ✅ 메인 콘텐츠 중앙정렬 래퍼 */
+    
     .main-content { flex-grow: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; box-sizing: border-box; }
     .container { width: 100%; max-width: 1000px; }
-    .page-title { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 20px; border-left: 5px solid #FF7710; padding-left: 15px; }
+    
+    /* 상단 컨트롤 영역 */
+    .top-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .page-title { font-size: 22px; font-weight: bold; color: #333; border-left: 5px solid #FF7710; padding-left: 15px; }
+    .filter-group { display: flex; gap: 10px; align-items: center; }
+    select, input[type="date"] { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; }
+    .print-btn { background-color: #333; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .print-btn:hover { background-color: #555; }
+
     /* 📊 상단 요약 카드 */
     .stats-container { display: flex; gap: 20px; margin-bottom: 30px; }
     .stat-card { flex: 1; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; border-bottom: 3px solid transparent; transition: 0.3s; }
-    .stat-card:hover { border-bottom: 3px solid #FF7710; transform: translateY(-3px); }
     .stat-label { font-size: 14px; color: #777; margin-bottom: 10px; }
     .stat-value { font-size: 28px; font-weight: bold; color: #333; }
     .stat-value.highlight { color: #FF7710; }
-    .stat-value.good { color: #28a745; }
     .stat-value.bad { color: #dc3545; }
+    .stat-value.grade { color: #007bff; }
+
     /* 📈 그래프 영역 */
-    .chart-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .chart-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-bottom: 30px;}
     .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .chart-title { font-size: 16px; font-weight: bold; color: #555; }
-    .chart-wrapper { position: relative; height: 400px; width: 100%; }
+    .chart-wrapper { position: relative; height: 350px; width: 100%; }
+
+    /* 📋 학생 목록 테이블 */
+    .table-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background-color: #fcfcfc; border-bottom: 2px solid #eee; }
+    th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; font-size: 14px; }
+    th { color: #777; }
+    tbody tr:hover { background-color: #fffaf0; }
+    .grade-badge { padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 13px; }
+    .grade-A { background: #d4edda; color: #155724; }
+    .grade-B { background: #cce5ff; color: #004085; }
+    .grade-C { background: #fff3cd; color: #856404; }
+    .grade-D, .grade-F { background: #f8d7da; color: #721c24; }
+
+    /* 🖨️ 인쇄용 CSS */
+    @page {
+      margin: 0; /* 💡 브라우저가 강제로 넣는 머리글/바닥글(URL 등) 완벽 제거! */
+    }
+
+    @media print {
+      body { 
+        background-color: white; 
+        margin: 1.5cm; /* 💡 margin:0 때문에 내용이 잘리지 않도록 본문에 여백 추가 */
+      }
+      header, .sidebar, .btn-group, .filter-group { display: none !important; }
+      .layout { height: auto; display: block; }
+      .main-content { padding: 0; display: block; }
+      .container { max-width: 100%; box-shadow: none; }
+      
+      /* 그림자 없애고 테두리만 깔끔하게 (detail.html, course_timeline.html 공용) */
+      .stat-card, .chart-card, .table-card, .info-card, .ai-comment-card { 
+        box-shadow: none; 
+        border: 1px solid #ddd; 
+        break-inside: avoid; /* 인쇄 시 카드가 페이지 중간에 반토막 나는 것 방지 */
+      }
+      .top-controls { border-bottom: 2px solid #000; }
+    }
   </style>
 </head>
 <body style="display:none;">
 
-  <!-- ✅ admin_dashboard와 통일된 헤더 -->
   <header>
     <div class="logo-area">
       <button id="sidebarToggleBtn">☰</button>
       <div class="logo-text">멋쟁이사자처럼</div>
       <div class="admin-badge" id="adminBadge" style="display:none;">Admin</div>
     </div>
-    <!-- ✅ 우측: {이름}님 환영합니다 + 로그아웃 -->
     <div class="header-right">
       <span class="welcome-text" id="welcomeText"></span>
       <button class="logout-btn" id="logoutBtn">로그아웃</button>
     </div>
   </header>
 
-  <!-- ✅ 사이드바 + 메인 분리 -->
   <div class="layout">
-
-    <!-- 🌟 왼쪽 사이드바 (admin_dashboard와 동일 메뉴) -->
     <div class="sidebar" id="sidebar">
       <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
       <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
-      <a href="/course_timeline.html" class="menu-item active">수업별 타임라인</a>
+      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
       <a href="/course_manage.html" class="menu-item">과정 관리</a>
     </div>
 
-    <!-- ✅ 중앙정렬 래퍼 -->
     <div class="main-content">
       <div class="container">
 
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-          <div class="page-title" id="pageTitle">수업 집중 평균</div>
-          <div style="display: flex; gap: 10px;">
-            <select id="coursePicker">수업목록</select>
+        <div class="top-controls">
+          <div class="page-title" id="pageTitle">과정 전체 리포트</div>
+          <div class="filter-group">
+            <select id="coursePicker"></select>
             <input type="date" id="datePicker">
+            <button class="print-btn" onclick="window.print()">🖨️ PDF 저장</button>
           </div>
         </div>
 
         <div class="stats-container">
           <div class="stat-card">
-            <div class="stat-label">평균 집중도</div>
+            <div class="stat-label">반 평균 집중도</div>
             <div class="stat-value highlight" id="avgScore">- %</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">최고 집중도</div>
-            <div class="stat-value good" id="maxScore">- %</div>
+            <div class="stat-label">반 평균 등급</div>
+            <div class="stat-value grade" id="avgGrade">-</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">최저 집중도</div>
-            <div class="stat-value bad" id="minScore">- %</div>
+            <div class="stat-label">오늘 총 이탈 발생</div>
+            <div class="stat-value bad" id="totalAbsences">- 회</div>
           </div>
         </div>
 
         <div class="chart-card">
           <div class="chart-header">
-            <div class="chart-title">🕒 수업 시간별 집중도 변화</div>
+            <div class="chart-title">🕒 반 전체 집중도 타임라인</div>
           </div>
           <div class="chart-wrapper">
             <div id="noDataMsg" style="display:none; text-align:center; padding: 40px; color: #999;">선택한 날짜의 데이터가 없습니다.</div>
@@ -118,10 +154,27 @@
           </div>
         </div>
 
+        <div class="table-card">
+          <div class="chart-title" style="margin-bottom: 15px;">👨‍🎓 학생별 상세 결과</div>
+          <table>
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th>집중도 점수</th>
+                <th>이탈 횟수</th>
+                <th>등급</th>
+                <th>상세보기</th>
+              </tr>
+            </thead>
+            <tbody id="student-list-body">
+              <tr><td colspan="5" style="color:#aaa;">데이터를 불러오는 중입니다...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
       </div>
     </div>
   </div>
-
 
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
@@ -138,30 +191,35 @@
       const userDoc = await UserCRUD.getUser(user.uid);
       if (!userDoc || userDoc.role !== 'admin') { window.location.href = '/'; return; }
 
-      // ✅ 환영 텍스트 + admin 뱃지
       document.getElementById('welcomeText').textContent = `${userDoc.name}님 환영합니다`;
       if (userDoc.role === 'admin') document.getElementById('adminBadge').style.display = 'inline-block';
       document.body.style.display = 'block';
 
-      // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
       const urlParams = new URLSearchParams(window.location.search);
       const today = new Date().toISOString().split('T')[0];
       const targetDate = urlParams.get('date') || today;
   
       const datePicker = document.getElementById('datePicker');
       const coursePicker = document.getElementById('coursePicker');
-      
-      datePicker.value = today;
+      datePicker.value = targetDate; // URL 파라미터 우선 적용
 
-      // 2. 그래프 그리는 함수 정의
-      function renderChart(timelineScore, avgScore, maxScore, minScore) {
+      // 등급 계산 로직 (Rule-based)
+      function calculateGrade(score) {
+          if(score === '-') return '-';
+          if(score >= 90) return 'A';
+          if(score >= 80) return 'B';
+          if(score >= 70) return 'C';
+          return 'D';
+      }
+
+      function renderChart(timelineScore, avgScore) {
         document.getElementById('noDataMsg').style.display = 'none';
         document.getElementById('focusTimelineChart').style.display = 'block';
+        
+        // 상단 카드 업데이트
         document.getElementById('avgScore').textContent = `${avgScore}%`;
-        document.getElementById('maxScore').textContent = `${maxScore}%`;
-        document.getElementById('minScore').textContent = `${minScore}%`;
+        document.getElementById('avgGrade').textContent = calculateGrade(avgScore);
 
-        // ✅ 20개로 샘플링
         const MAX_POINTS = 20;
         let sampledData = [];
 
@@ -178,8 +236,7 @@
             }
         }
 
-        // ✅ 라벨 생성 (index 1개 = 10초 기준)
-        const totalSeconds = timelineScore.length * 10; // 원본 길이 기준 총 시간
+        const totalSeconds = timelineScore.length * 10; 
         const pointCount = sampledData.length;
 
         function formatTime(seconds) {
@@ -229,20 +286,13 @@
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    y: { 
-                      beginAtZero: true, 
-                      max: 100, 
-                      grid: { color: '#f0f0f0' },
-                      ticks: {
-                          callback: (value) => `${value}%`
-                      }
-                  },
+                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: (value) => `${value}%` } },
                     x: { grid: { display: false } }
                 },
                 interaction: { intersect: false, mode: 'index' }
             }
         });
-    }
+      }
 
       const courses = await CourseCRUD.getCourses();
       courses.forEach(course => {
@@ -252,61 +302,83 @@
         coursePicker.appendChild(option);
       });
   
-      coursePicker.addEventListener('change', () => {
-          loadDetailData(coursePicker.value, datePicker.value);
-      });
-  
-      datePicker.addEventListener('change', () => {
-          loadDetailData(coursePicker.value, datePicker.value);
-      });
+      coursePicker.addEventListener('change', () => loadDetailData(coursePicker.value, datePicker.value));
+      datePicker.addEventListener('change', () => loadDetailData(coursePicker.value, datePicker.value));
   
       loadDetailData(coursePicker.value, datePicker.value);
 
       async function loadDetailData(courseId, date) {
         const dateParts = date.split('-');
         const courseName = coursePicker.options[coursePicker.selectedIndex].text;
-        document.getElementById('pageTitle').textContent = `${courseName} 집중 평균 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
+        document.getElementById('pageTitle').textContent = `[${courseName}] 전체 리포트 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
 
+        // 1. 차트 데이터 로드
         const data = await CourseTLCRUD.getCourseTimeline(courseId, date); 
-        console.log('[loadDetailData] getCourseTimeline 결과:', data);
-
+        
         if (!data || data.timelineScore.length === 0) {
-            console.log('[loadDetailData] 저장된 데이터 없음 → getStudentTimelines 호출');
-            const allTimelines = await CourseTLCRUD.getStudentTimelines(courseId, date);
-            console.log('[loadDetailData] allTimelines:', allTimelines);
-
-            if (allTimelines.length === 0) {
-                document.getElementById('avgScore').textContent = '- %';
-                document.getElementById('maxScore').textContent = '- %';
-                document.getElementById('minScore').textContent = '- %';
-                document.getElementById('noDataMsg').style.display = 'block';
-                document.getElementById('focusTimelineChart').style.display = 'none';
-                return;
-            }
-
-            // 계산 후 저장
-            const avgTimeline = CourseTLCRUD.calculateAverageTimeline(allTimelines);
-            console.log('[loadDetailData] avgTimeline:', avgTimeline);
-            const saved = await CourseTLCRUD.saveCourseTimeline(courseId, date, avgTimeline);
-            console.log('[loadDetailData] saveCourseTimeline 완료:', saved);
-
-            renderChart(saved.timelineScore, saved.avgScore, saved.maxScore, saved.minScore);
-
+            document.getElementById('avgScore').textContent = '- %';
+            document.getElementById('avgGrade').textContent = '-';
+            document.getElementById('totalAbsences').textContent = '- 회';
+            document.getElementById('noDataMsg').style.display = 'block';
+            document.getElementById('focusTimelineChart').style.display = 'none';
+            document.getElementById('student-list-body').innerHTML = '<tr><td colspan="5" style="color:#aaa;">데이터가 없습니다.</td></tr>';
             return;
         }
 
-        renderChart(data.timelineScore, data.avgScore, data.maxScore, data.minScore);
+        renderChart(data.timelineScore, data.avgScore);
+
+        // 2. 학생별 상세 데이터 로드 및 테이블/통계 구축
+        const students = await CourseCRUD.getStudentsByCourse(courseId);
+        let totalAbsencesCount = 0;
+        const tbody = document.getElementById('student-list-body');
+        tbody.innerHTML = '';
+
+        for (const student of students) {
+            let score = '-';
+            let absences = 0;
+
+            try {
+                // 1. 최종 리포트 문서 조회
+                const doc = await db.collection('users').doc(student.uid).collection('daily_reports').doc(date).get();
+                
+                if(doc.exists && doc.data().totalScore !== undefined) {
+                    // [수업 종료 후]
+                    score = doc.data().totalScore;
+                    absences = doc.data().absentCount ?? 0;
+                } else {
+                    // [수업 진행 중] 실시간 데이터로 계산 (StudentReportCRUD 활용)
+                    const timeline = await StudentReportCRUD.getTimelineScore(student.uid, date);
+                    if (timeline && timeline.length > 0) {
+                        score = Math.round(timeline.reduce((a,b)=>a+b,0)/timeline.length);
+                        absences = timeline.filter(s => s === 0).length;
+                    }
+                }
+            } catch(e) { console.error(e); }
+
+            const grade = score !== '-' ? calculateGrade(score) : '-';
+            if(typeof absences === 'number') totalAbsencesCount += absences;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight:bold; color:#333;">${student.name}</td>
+                <td style="font-weight:bold;">${score}${score !== '-' ? '점' : ''}</td>
+                <td style="color:#dc3545;">${absences}회</td>
+                <td><span class="grade-badge grade-${grade}">${grade}</span></td>
+                <td><button style="border:1px solid #FF7710; background:white; color:#FF7710; font-weight:bold; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/detail.html?uid=${student.uid}&date=${date}'">개인 리포트</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        document.getElementById('totalAbsences').textContent = `${totalAbsencesCount} 회`;
       }
     });
       
-    document.getElementById('sidebarToggleBtn')
-      .addEventListener('click', () => {
+    document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
         document.getElementById('sidebar').classList.toggle('collapsed');
-      });
+    });
     document.getElementById('logoutBtn').addEventListener('click', () => {
       auth.signOut().then(() => { window.location.href = '/'; });
     });
-
   </script>
 </body>
 </html>
