@@ -11,7 +11,16 @@
     body {
       margin: 0; display: flex; justify-content: center; align-items: center;
       height: 100vh; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
     }
+    /* 입력창은 예외 */
+    input, textarea {
+      user-select: text;
+    }
+
     .login-container {
       background: white; padding: 50px 40px; border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px;
