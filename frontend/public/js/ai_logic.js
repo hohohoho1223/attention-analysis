@@ -6,6 +6,7 @@ class RemoteAttentionState {
     constructor(payload = {}) {
         this.state = payload.state ?? "FOCUSED";
         this.score = payload.score ?? 100.0;
+        this.is_fixated = payload.is_fixated ?? false;
         this.face_detected = payload.face_detected ?? false;
         this.gaze_direction = payload.gaze_direction ?? "Unknown";
         this.blink_bpm = payload.blink_bpm ?? 0;
@@ -50,7 +51,7 @@ class RemoteAttentionEngine {
         this.lastState = new RemoteAttentionState();
     }
 
-    async analyzeFrame(videoOrCanvasEl, fps = 30.0) {
+    async analyzeFrame(videoOrCanvasEl, fps = 2.0) {
         const frame = this._encodeFrame(videoOrCanvasEl);
         const payload = {
             frame,

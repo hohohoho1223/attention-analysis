@@ -134,16 +134,12 @@
               latestAttentionState = state;
               // FIXATED 여부 
               const isFixated = state.is_fixated;
-
-              // face_direction (yaw 기준)
-              let faceDirection = 'Center';
-              if (state.pose?.yaw > 15) faceDirection = 'Left';
-              else if (state.pose?.yaw < -15) faceDirection = 'Right';
-
+              
+              // main.py의 get_face_direction() 결과를 기반으로 얼굴 방향 판단
               console.log('[RemoteAttentionEngine] state', {
                 ...state,
                 isFixated,
-                faceDirection,
+                faceDirection: state.face_direction,
               });
             })
             .catch((err) => {
@@ -173,10 +169,6 @@
 
       if (isClassStarted && Number.isFinite(attentionState.score)) {
         sessionScores.push(attentionState.score);
-        console.log('[score]', attentionState.score, attentionState.state, {
-          faceDetected,
-          remoteDrowsy: attentionState?.cnn?.is_drowsy ?? false,
-        });
       }
 
       if (realtimeStatus && isClassStarted) {

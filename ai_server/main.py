@@ -322,12 +322,24 @@ class FrameAnalyzerSession:
             eye_status_msg=self.eye_status_msg,
             is_drowsy=is_drowsy,
         )
-        
+
+        # 얼굴 방향 계산 (attention_logic.py의 focused_yaw_threshold 사용)
+        yaw = float(self.pose_angles.yaw)
+        threshold = self.attention_config.focused_yaw_threshold
+
+        if yaw > threshold:
+            face_direction = "Left"
+        elif yaw < -threshold:
+            face_direction = "Right"
+        else:
+            face_direction = "Center"
+
         # FastAPI가 JSON으로 변환해서 HTTP 응답으로 보냄
         return {
             'state': attention_state.state,
             'score': float(attention_state.score),
             'face_detected': bool(self.face_detected),
+            'face_direction': face_direction,
             'gaze_direction': self.gaze_direction,
             'is_fixated': bool(attention_state.is_fixated),
             'blink_bpm': int(self.blink_bpm),
