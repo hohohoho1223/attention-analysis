@@ -31,8 +31,35 @@
     .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
     /* ✅ 메인 콘텐츠 중앙정렬 래퍼 */
     .main-content { flex-grow: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; box-sizing: border-box; }
-    .main-container { width: 100%; max-width: 1000px; display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
-    @media (max-width: 768px) { .main-container { grid-template-columns: 1fr; } }
+
+    /* 🌟 [수정] 전체 레이아웃: 학생패널 + 달력+요약 */
+    /* main-content가 flex 컨테이너이므로 main-container는 width:100%로 꽉 채우되 max-width로 제한 */
+    .main-container { width: 100%; max-width: 1300px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+    @media (max-width: 900px) { .main-container { grid-template-columns: 1fr; } }
+
+    /* 🌟 [신규] 좌측 학생 선택 패널 */
+    .student-select-panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 16px; height: fit-content; }
+    .student-panel-title { font-size: 15px; font-weight: bold; color: #333; padding-bottom: 10px; border-bottom: 2px solid #FF7710; }
+
+    /* 🌟 [신규] 과정 드롭다운 - course_manage 스타일 */
+    .custom-select-wrapper { position: relative; display: block; }
+    .custom-select { appearance: none; -webkit-appearance: none; width: 100%; padding: 8px 32px 8px 12px; border: 1.5px solid #FF7710; border-radius: 8px; font-size: 13px; font-family: inherit; font-weight: bold; color: #333; background-color: white; cursor: pointer; outline: none; transition: 0.2s; box-shadow: 0 2px 8px rgba(255,119,16,0.15); box-sizing: border-box; }
+    .custom-select:hover { background-color: #fffaf0; }
+    .custom-select:focus { border-color: #e05e00; box-shadow: 0 0 0 3px rgba(255,119,16,0.15); }
+    .custom-select-wrapper::after { content: '▾'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #FF7710; pointer-events: none; font-size: 13px; }
+
+    /* 🌟 [신규] 학생 목록 - course_manage의 과정목록 스타일 참고 */
+    .student-list-wrapper { display: flex; flex-direction: column; gap: 8px; }
+    /* 전체보기(과정 평균) 아이템 */
+    .student-item { padding: 10px 14px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 6px; cursor: pointer; transition: 0.2s; font-size: 13px; font-weight: bold; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .student-item:hover { border-color: #FF7710; color: #FF7710; }
+    .student-item.active { background-color: #FF7710; color: white; border-color: #FF7710; box-shadow: 0 2px 8px rgba(255,119,16,0.3); }
+    .student-list-empty { font-size: 13px; color: #aaa; text-align: center; padding: 10px 0; }
+
+    /* 🌟 [수정] 우측 달력+요약 영역 */
+    .right-area { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; min-width: 0; align-items: start; }
+    @media (max-width: 768px) { .right-area { grid-template-columns: 1fr; } }
+
     .calendar-card, .summary-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
     .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; color: #FF7710; font-weight: bold; }
     .month-nav-btn { background: none; border: 1px solid #FF7710; color: #FF7710; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; }
@@ -100,45 +127,62 @@
     <div class="main-content">
       <div class="main-container">
 
-        <div class="calendar-card">
-          <div class="calendar-header">
-            <button class="month-nav-btn" id="prevMonth">< 이전 달</button>
-            <span id="currentMonthTitle">2026년 3월</span>
-            <button class="month-nav-btn" id="nextMonth">다음 달 ></button>
-          </div>
-          <div style="margin-bottom: 20px;">
-            <select id="courseSelect" style="width: 100%; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 15px; font-weight: bold;"></select>
-          </div>
-          <div class="calendar-grid">
-            <div class="day-name sun">일</div> <div class="day-name">월</div> <div class="day-name">화</div> <div class="day-name">수</div> <div class="day-name">목</div> <div class="day-name">금</div> <div class="day-name sat">토</div>
-          </div>
-          <div class="calendar-grid" id="calendarBody"></div>
-        </div>
+        <!-- 🌟 [신규] 좌측 학생 선택 패널: 과정 드롭다운 + 학생 목록 -->
+        <div class="student-select-panel" id="studentSelectPanel">
+          <div class="student-panel-title">학생 선택</div>
 
-        <div class="summary-card">
-          <div class="summary-title">📈 결과 요약</div>
-          <div class="summary-item">
-            <div class="summary-label">이번 주 평균 점수</div>
-            <div class="summary-value rate" id="weeklyScore">- %</div>
+          <!-- 과정 드롭다운 (course_manage 스타일) -->
+          <div class="custom-select-wrapper">
+            <select id="courseSelect" class="custom-select"></select>
           </div>
-          <div class="summary-item">
-            <div class="summary-label">이번 주 등급</div>
-            <div class="summary-grade">
-              <div class="summary-value grade" id="weeklyGrade">-</div>
-            </div>
-          </div>
-          <div class="summary-item" style="margin-top: 20px;">
-            <div class="summary-label">이번 달 평균 점수</div>
-            <div class="summary-value rate" id="monthlyScore">- %</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-label">이번 달 등급</div>
-            <div class="summary-grade">
-              <div class="summary-value grade" id="monthlyGrade">-</div>
-            </div>
+
+          <!-- 학생 목록 (course_manage 과정목록 스타일) -->
+          <div class="student-list-wrapper" id="studentListWrapper">
+            <div class="student-list-empty">과정을 선택해주세요</div>
           </div>
         </div>
 
+        <!-- 🌟 [수정] 우측: 달력 + 요약 -->
+        <div class="right-area">
+
+          <div class="calendar-card">
+            <div class="calendar-header">
+              <button class="month-nav-btn" id="prevMonth">< 이전 달</button>
+              <span id="currentMonthTitle">2026년 3월</span>
+              <button class="month-nav-btn" id="nextMonth">다음 달 ></button>
+            </div>
+            <!-- 🌟 [수정] 과정 드롭다운을 좌측 패널로 이동했으므로 여기서는 제거 -->
+            <div class="calendar-grid">
+              <div class="day-name sun">일</div> <div class="day-name">월</div> <div class="day-name">화</div> <div class="day-name">수</div> <div class="day-name">목</div> <div class="day-name">금</div> <div class="day-name sat">토</div>
+            </div>
+            <div class="calendar-grid" id="calendarBody"></div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-title">📈 결과 요약</div>
+            <div class="summary-item">
+              <div class="summary-label">이번 주 평균 점수</div>
+              <div class="summary-value rate" id="weeklyScore">- %</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">이번 주 등급</div>
+              <div class="summary-grade">
+                <div class="summary-value grade" id="weeklyGrade">-</div>
+              </div>
+            </div>
+            <div class="summary-item" style="margin-top: 20px;">
+              <div class="summary-label">이번 달 평균 점수</div>
+              <div class="summary-value rate" id="monthlyScore">- %</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">이번 달 등급</div>
+              <div class="summary-grade">
+                <div class="summary-value grade" id="monthlyGrade">-</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   </div>
@@ -304,7 +348,7 @@
         const monthlyData = await StudentReportCRUD.getMonthDailyReports(uid, year, month + 1);
         console.log('[updateSummaries] monthlyData:', monthlyData);
 
-        const monthlyResult = await StudentReportCRUD.calculateRangeAverage(uid, Object.keys(monthlyData));
+        const monthlyResult = await StudentReportCRUD.calculateStudentAvg(uid, Object.keys(monthlyData));
         console.log('[updateSummaries] monthlyResult:', monthlyResult);
         
         if (monthlyResult.count > 0) {
@@ -333,7 +377,7 @@
         }
 
         console.log('[updateSummaries] weekDates:', weekDates);
-        const weeklyResult = await StudentReportCRUD.calculateRangeAverage(uid, weekDates);
+        const weeklyResult = await StudentReportCRUD.calculateStudentAvg(uid, weekDates);
         console.log('[updateSummaries] weeklyResult:', weeklyResult);
         
         if (weeklyResult.count > 0) {
@@ -384,6 +428,51 @@
       else renderCalendar(currentUid);
     });
 
+    // 🌟 [신규] 학생 목록 패널 렌더링 함수
+    // courseId에 해당하는 학생들을 course_manage의 과정목록 스타일로 표시
+    // activeUid가 있으면 해당 학생을 활성화 상태로 표시
+    async function renderStudentList(courseId, activeUid) {
+        const wrapper = document.getElementById('studentListWrapper');
+        wrapper.innerHTML = '';
+
+        const students = await CourseCRUD.getStudentsByCourse(courseId);
+
+        if (students.length === 0) {
+            wrapper.innerHTML = '<div class="student-list-empty">등록된 학생이 없습니다</div>';
+            return;
+        }
+
+        // 전체보기(과정 평균) 아이템
+        const allItem = document.createElement('div');
+        allItem.className = 'student-item' + (!activeUid ? ' active' : '');
+        allItem.textContent = '전체 (과정 평균)';
+        allItem.addEventListener('click', async () => {
+            // 전체 평균 모드
+            document.querySelectorAll('.student-item').forEach(el => el.classList.remove('active'));
+            allItem.classList.add('active');
+            isAvgMode = true;
+            currentStudents = students;
+            renderCalendarAvg(currentStudents);
+        });
+        wrapper.appendChild(allItem);
+
+        // 학생별 아이템
+        students.forEach((student) => {
+            const item = document.createElement('div');
+            item.className = 'student-item' + (activeUid === student.uid ? ' active' : '');
+            item.textContent = student.name;
+            item.title = student.name; // 긴 이름 툴팁
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.student-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+                isAvgMode = false;
+                currentUid = student.uid;
+                renderCalendar(currentUid);
+            });
+            wrapper.appendChild(item);
+        });
+    }
+
     let currentUid = null;
     auth.onAuthStateChanged(async (user) => {
       console.log('[onAuthStateChanged] 진입', { user });
@@ -409,6 +498,7 @@
         auth.signOut().then(() => { window.location.href = '/'; });
       });
 
+      // 🌟 [수정] 과정 드롭다운: 좌측 패널의 #courseSelect 사용
       const courseSelect = document.getElementById('courseSelect');
       const courses = await CourseCRUD.getCourses();
       courses.forEach(course => {
@@ -418,8 +508,11 @@
           courseSelect.appendChild(option);
       });
 
+      // 🌟 [수정] 과정 변경 시 학생 목록도 갱신 + 전체 평균 모드로 달력 렌더
       courseSelect.addEventListener('change', async () => {
           currentStudents = await CourseCRUD.getStudentsByCourse(courseSelect.value);
+          isAvgMode = true;
+          await renderStudentList(courseSelect.value, null); // 전체보기 활성화
           renderCalendarAvg(currentStudents);
       });
 
@@ -428,19 +521,20 @@
       console.log('[onAuthStateChanged] uidParam:', uidParam, '| userDoc.role:', userDoc.role);
 
       if (uidParam) {
-          // 단일 학생 모드 - 드롭다운 숨기기
-          document.getElementById('courseSelect').style.display = 'none';
+          // 단일 학생 모드 - 학생 선택 패널 숨기기
+          document.getElementById('studentSelectPanel').style.display = 'none';
           isAvgMode = false;
           currentUid = uidParam;
           renderCalendar(currentUid);
       } else if (userDoc.role === 'admin') {
-          // admin - 드롭다운 보여주고 과정 선택
+          // admin - 학생 선택 패널 표시, 첫 과정 선택
           isAvgMode = true;
           currentStudents = await CourseCRUD.getStudentsByCourse(courseSelect.value);
+          await renderStudentList(courseSelect.value, null); // 전체보기 활성화
           renderCalendarAvg(currentStudents);
       } else {
-          // 학생 본인 - 드롭다운 숨기기
-          document.getElementById('courseSelect').style.display = 'none';
+          // 학생 본인 - 학생 선택 패널 숨기기
+          document.getElementById('studentSelectPanel').style.display = 'none';
           isAvgMode = false;
           currentUid = user.uid;
           renderCalendar(currentUid);
