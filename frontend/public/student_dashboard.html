@@ -167,13 +167,18 @@
 
       const attentionState = latestAttentionState;
 
-      if (isClassStarted && Number.isFinite(attentionState.score)) {
+      if (
+        isClassStarted &&
+        Number.isFinite(attentionState.score) &&
+        attentionState.state !== 'CALIBRATING'
+      ) {
         sessionScores.push(attentionState.score);
       }
 
       if (realtimeStatus && isClassStarted) {
         let statusKOR = '대기중';
-        if (attentionState.state === 'FOCUSED') statusKOR = '집중';
+        if (attentionState.state === 'CALIBRATING') statusKOR = '눈 인식 중...';
+        else if (attentionState.state === 'FOCUSED') statusKOR = '집중';
         else if (attentionState.state === 'PARTIAL_FOCUS') statusKOR = '집중 저하';
         else if (attentionState.state === 'LOST_FOCUS') statusKOR = '이탈';
         else if (attentionState.state === 'ABSENT') statusKOR = '자리비움';
