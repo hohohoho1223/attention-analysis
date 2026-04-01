@@ -10,12 +10,12 @@ class AttentionConfig:
     yaw_threshold: float = 60.0 # 확실히 돌아간 상태로 간주하는 각도 임계치
     pitch_threshold: float = 30.0
     roll_threshold: float = 25.0
-    focused_yaw_threshold: float = 35.0 # 정면 허용 범위 각도 -> 이 범위 안이면 '정면(집중 가능한 상태)'으로 본다
+    focused_yaw_threshold: float = 33.0 # 정면 허용 범위 각도 -> 이 범위 안이면 '정면(집중 가능한 상태)'으로 본다
     focused_pitch_threshold: float = 15.0
     focused_roll_threshold: float = 10.0
     partial_focus_time: float = 3.0
     lost_focus_time: float = 5.0
-    no_face_time: float = 5.0
+    no_face_time: float = 10.0
     smoothing_alpha: float = 0.35 # 스무딩 가중치 0.35(0.0 ~ 1.0)로 설정-> 현재 측정값이 35%, 이전 측정값 65% 반영
     recovery_speed: float = 1.5
 

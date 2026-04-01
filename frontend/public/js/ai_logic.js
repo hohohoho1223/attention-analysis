@@ -15,7 +15,11 @@ class RemoteAttentionState {
         this.absent_count = payload.absent_count ?? 0;
 
         this.pose = payload.pose ?? { yaw: 0.0, pitch: 0.0, roll: 0.0 };
-        this.body = payload.body ?? { visible: false, shoulder_tilt: 0.0 };
+        this.body = {
+            visible: payload.body?.visible ?? false,
+            shoulder_tilt: payload.body?.shoulder_tilt ?? 0.0,
+            smoothed_shoulder_tilt: payload.body?.smoothed_shoulder_tilt ?? 0.0,
+        };
         this.durations = payload.durations ?? {
             head: 0.0,
             body: 0.0,

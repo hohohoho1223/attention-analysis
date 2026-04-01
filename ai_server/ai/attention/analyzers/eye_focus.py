@@ -163,7 +163,7 @@ class EyeFocusAnalyzer:
     def _classify_gaze(self, smooth_gaze: float) -> str:
         if smooth_gaze < 0.44:
             return "Right"
-        if smooth_gaze > 0.62:
+        if smooth_gaze > 0.55:
             return "Left"
         return "Center"
 
@@ -261,12 +261,24 @@ class EyeFocusAnalyzer:
 
         ratio_l, width_l = self._get_gaze_ratio(left_eye_coords, left_iris_coords)
         ratio_r, width_r = self._get_gaze_ratio(right_eye_coords, right_iris_coords)
+
+        selected_eye = "LeftEye" if width_l > width_r else "RightEye"
         current_gaze_ratio = ratio_l if width_l > width_r else ratio_r
 
         # 시선 버퍼에 추가하고 평균 계산 → “최근 여러 프레임이 누적되어야 방향이 안정적으로 바뀜(노이즈 완화)”
         self.gaze_buffer.append(current_gaze_ratio)
         smooth_gaze = sum(self.gaze_buffer) / len(self.gaze_buffer)
         gaze_direction = self._classify_gaze(smooth_gaze)
+
+        print(
+            "[GAZE DEBUG] "
+            f"ratio_l={ratio_l:.3f} (w={width_l:.1f}) | "
+            f"ratio_r={ratio_r:.3f} (w={width_r:.1f}) | "
+            f"selected={selected_eye} | "
+            f"current={current_gaze_ratio:.3f} | "
+            f"smooth={smooth_gaze:.3f} | "
+            f"direction={gaze_direction}"
+        )
 
         return self._build_focus_result(
             gaze_direction=gaze_direction,
