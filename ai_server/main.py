@@ -360,6 +360,7 @@ class FrameAnalyzerSession:
                 'fixation_break': float(attention_state.fixation_break_duration),
                 'no_face': float(attention_state.no_face_duration),
             },
+            'absent_count': int(attention_state.absent_count),
             'cnn': {
                 'is_drowsy': bool(is_drowsy),
                 **cnn_probs,

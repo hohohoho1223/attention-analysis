@@ -40,6 +40,7 @@ class AttentionState:
     blink_bpm: int = 0
     eye_focus_score: float = 100.0
     eye_status_msg: str = "Eye analysis disabled"
+    absent_count: int = 0
 
 class AttentionAnalyzer:
     def __init__(
@@ -182,6 +183,9 @@ class AttentionAnalyzer:
     def _update_state_label(self) -> None:
         # 1) 얼굴이 일정 시간 이상 검출되지 않으면 ABSENT
         if self.state.no_face_duration >= self.config.no_face_time:
+            # ABSENT 상태 진입 시 카운트 증가 (중복 증가 방지)
+            if self.state.state != "ABSENT":
+                self.state.absent_count += 1
             self.state.state = "ABSENT"
             return
 
