@@ -150,7 +150,15 @@
           remoteAttentionEngine.analyzeFrame(videoElement, 2.0)
             .then((state) => {
               latestAttentionState = state;
-              console.log('[RemoteAttentionEngine] state', state);
+              // FIXATED 여부 
+              const isFixated = state.is_fixated;
+              
+              // main.py의 get_face_direction() 결과를 기반으로 얼굴 방향 판단
+              console.log('[RemoteAttentionEngine] state', {
+                ...state,
+                isFixated,
+                faceDirection: state.face_direction,
+              });
             })
             .catch((err) => {
               console.error('[RemoteAttentionEngine] analyzeFrame failed', err);
@@ -179,10 +187,6 @@
 
       if (isClassStarted && Number.isFinite(attentionState.score)) {
         sessionScores.push(attentionState.score);
-        console.log('[score]', attentionState.score, attentionState.state, {
-          faceDetected,
-          remoteDrowsy: attentionState?.cnn?.is_drowsy ?? false,
-        });
       }
 
       if (realtimeStatus && isClassStarted) {
@@ -229,7 +233,7 @@
       webcamSection.style.display = 'block';
       currentUser = user;
 
-      // 회원 탈퇴
+      // 회웥 탈퇴
       const withdrawBtn = document.getElementById('withdrawBtn');
 
       if (withdrawBtn) {

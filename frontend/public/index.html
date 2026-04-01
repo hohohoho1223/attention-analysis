@@ -94,13 +94,29 @@
 
           if (!userDoc) {
             const courseSelect = document.getElementById('courseName');
-            const courses = await CourseCRUD.getCourses();
+            let courses = await CourseCRUD.getCourses();
+
+            if (!courses || courses.length === 0) {
+              console.log("course 없음 → 미정 생성");
+              await CourseCRUD.addCourse("미정", "system");
+                courses = await CourseCRUD.getCourses();
+              } else if (courses.length === 1 && courses[0].courseName === "미정") {
+                console.log("미정만 존재 → 그대로 사용");
+              } else {
+                courses = courses.filter(course => course.courseName !== "미정");
+              }
+            
+            // 과정 선택 드롭다운을 초기화해서, 기존 옵션을 지운 뒤 최신 과정 목록만 다시 넣기 위한 코드입니다.
+            courseSelect.innerHTML = '';
+
             courses.forEach(course => {
               const option = document.createElement('option');
               option.value = course.courseId;
               option.textContent = course.courseName;
               courseSelect.appendChild(option);
             });
+
+          
 
             loginSection.style.display = 'none';
             inputSection.style.display = 'block';
@@ -121,6 +137,7 @@
     // submitBtn 로직
     submitBtn.addEventListener('click', async () => {
       console.log("submitBtn 클릭됨");
+
       const name = document.getElementById('studentName').value.trim();
       const courseSelect = document.getElementById('courseName');
       const courseId = courseSelect.value;

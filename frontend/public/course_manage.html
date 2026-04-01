@@ -10,7 +10,7 @@
   
   <style>
     /* 🎨 멋사 시그니처 & 관리자 공통 테마 */
-    .sidebar, .panel-title, .course-item, .b { user-select: none; }
+    .sidebar, .panel-title, .b { user-select: none; } /* .course-item 은 더블클릭을 위해 user-select 해제 */
     body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; }
     header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
     .logo-area { display: flex; align-items: center; gap: 15px; }
@@ -19,36 +19,37 @@
     
     .container { display: flex; height: calc(100vh - 65px); }
     
-    /* 🌟 왼쪽 사이드바 (피그마 메뉴 연동) */
+    /* 🌟 왼쪽 사이드바 */
     .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap;}
     .sidebar.collapsed {width: 0; padding: 0;}
     .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
     .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
     .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
 
-    /* 🌟 메인 컨텐츠 영역 (2단 분리 레이아웃) */
+    /* 🌟 메인 컨텐츠 영역 */
     .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; display: flex; gap: 30px; }
     
     /* 왼쪽: 과정 목록 패널 */
     .course-panel { width: 250px; flex: 1; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); height: fit-content; }
     .panel-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #FF7710; display: flex; justify-content: space-between; align-items: center; }
-    .course-item { padding: 12px 15px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 6px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; font-size: 14px; font-weight: bold; color: #555; }
+    
+    /* 과정 항목 스타일 수정: 더블클릭 힌트 추가 */
+    .course-item-container { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .course-item { flex-grow: 1; padding: 12px 15px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 6px; cursor: pointer; transition: 0.2s; font-size: 14px; font-weight: bold; color: #555; position: relative; }
+    .course-item:hover::after { content: "더블클릭하여 수정"; position: absolute; right: 10px; font-size: 11px; color: #aaa; }
     .course-item:hover { border-color: #FF7710; color: #FF7710; }
     .course-item.active { background-color: #FF7710; color: white; border-color: #FF7710; box-shadow: 0 2px 8px rgba(255,119,16,0.3); }
+    .course-item.active:hover::after { color: #fff; opacity: 0.7;}
+    .inline-edit-input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #FF7710; border-radius: 4px; font-size: 14px; font-family: inherit;}
+    .course-item.editing::after { display: none !important; }
+    .editable-cell.editing::after { display: none !important; }
 
     /* 오른쪽: 학생 관리 테이블 패널 */
     .student-panel { flex-grow: 1; flex: 3; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-    .top-controls { display: flex; justify-content: flex-end; margin-bottom: 15px; gap: 10px; }
-    .action-btn { padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 13px; }
-    .btn-edit { background-color: #f1f3f5; color: #555; border: 1px solid #ddd; }
-    .btn-edit:hover { background-color: #e2e6ea; }
-    .btn-save { background-color: #FF7710; color: white; border: none; }
-    .btn-save:hover { background-color: #e66a00; }
-
-    #courseEditControls, #studentEditControls {
-      display: flex;
-      gap: 0.5rem;
-    }
+    .action-btn { padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 12px; border: 1px solid #ddd; background-color: #fff;}
+    .action-btn:hover { background-color: #f1f3f5; }
+    .btn-delete-small { color: #dc3545; border-color: #dc3545;}
+    .btn-delete-small:hover { background-color: #dc3545; color: white;}
 
     table { width: 100%; border-collapse: collapse; }
     thead { background-color: #fcfcfc; border-top: 1px solid #ddd; border-bottom: 2px solid #eee; }
@@ -57,7 +58,9 @@
     tbody tr:hover { background-color: #fffaf0; }
     .role-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; background-color: #e9ecef; color: #495057; }
     .role-badge.student { background-color: #e0f3ff; color: #007bff; }
-    .course-item input[type="checkbox"] {margin-right: 8px;}
+    
+    .editable-cell { cursor: pointer; position: relative; }
+    .editable-cell:hover::after { content: "✏️"; position: absolute; right: 5px; opacity: 0.5;}
   </style>
 </head>
 <body style="display:none;">
@@ -65,7 +68,7 @@
   <header>
     <div class="logo-area">
       <button id="sidebarToggleBtn" onclick="toggleSidebar()" 
-        style="background:none; cursor:pointer; border:none; font-size:20px; cursor:pointer; color:#555;">☰</button>
+        style="background:none; cursor:pointer; border:none; font-size:20px; color:#555;">☰</button>
       <div class="logo-text">멋쟁이사자처럼</div>
       <div class="admin-badge">Admin</div>
     </div>
@@ -84,27 +87,15 @@
       <div class="course-panel">
         <div class="panel-title">
           <span>과정 목록</span>
-          <button id="courseEditBtn" class="action-btn btn-edit">수정</button>
-          <!-- 수정 모드일 때만 보이는 버튼들 -->
-          <div id="courseEditControls" style="display:none;">
-              <button id="btnCreateCourse" class="action-btn btn-edit">생성</button>
-              <button id="btnDeleteCourse" class="action-btn btn-edit">삭제</button>
-              <button id="btnSaveCourse" class="action-btn btn-save">저장</button>
-          </div>
+          <button id="btnCreateCourse" class="action-btn" style="border-color:#FF7710; color:#FF7710;">+ 과정 추가</button>
         </div>
-        <div id="course-item"></div>
-        <!-- <div class="course-item" onclick="selectCourse(this, '프론트엔드 3기')">프론트엔드 3기</div> -->
+        <div id="course-list"></div>
       </div>
 
       <div class="student-panel">
         <div class="panel-title">
           <span id="currentCourseTitle">학생 관리</span>
-          <button id="studentEditBtn" class="action-btn btn-edit">수정</button>
-          <div id="studentEditControls" style="display:none;">
-            <button id="btnDeleteStudent" class="action-btn btn-edit">삭제</button>
-            <button id="btnSaveStudent" class="action-btn btn-save">저장</button>
           </div>
-        </div>
 
         <table>
           <thead>
@@ -113,10 +104,11 @@
               <th>이름</th>
               <th>권한</th>
               <th>이메일</th>
+              <th>관리</th>
             </tr>
           </thead>
           <tbody id="student-list-body">
-            </tbody>
+          </tbody>
         </table>
       </div>
 
@@ -132,7 +124,8 @@
     function toggleSidebar() {
       document.querySelector('.sidebar').classList.toggle('collapsed');
     }
-    auth.onAuthStateChanged(async (user) => { // 권한 확인
+
+    auth.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = '/'; return; }
       
       const userDoc = await UserCRUD.getUser(user.uid);
@@ -144,139 +137,175 @@
 
       const tbody = document.getElementById('student-list-body');
       const courseTitle = document.getElementById('currentCourseTitle');
+      let currentCourse = null;
       
-      // 수정/생성/삭제 상태
-      var state = {
-        currentCourse: null,             // 초기 null → renderCourseList() 후 첫번째 Course 객체로 세팅
-        courseEditMode: false,           // 과정 수정 모드 여부
-        studentEditMode: false,          // 학생 수정 모드 여부
-        selectedCourses: [],             // 삭제할 과정 (체크박스)
-        selectedStudents: [],            // 삭제할 학생 (체크박스)
-      };
-      
-    
+      // 1. 과정 목록 렌더링 및 인라인 에디팅 적용
       async function renderCourseList() {
         const courses = await CourseCRUD.getCourses();
-        const courseList = document.getElementById('course-item');
+        const courseList = document.getElementById('course-list');
         courseList.innerHTML = '';
 
         if (courses.length === 0) {
-          courseList.innerHTML = '<p style="color:#aaa; font-size:14px;">등록된 과정이 없습니다.</p>';
-          state.currentCourse = null;
+          courseList.innerHTML = '<p style="color:#aaa; font-size:14px; text-align:center;">등록된 과정이 없습니다.</p>';
+          currentCourse = null;
           courseTitle.textContent = '학생 관리';
           tbody.innerHTML = '';
           return;
         }
 
         courses.forEach((course, index) => {
-          const div = document.createElement('div');
-          div.className = 'course-item' + (index === 0 ? ' active' : '');
-          div.textContent = course.courseName;
-          div.onclick = () => selectCourse(div, course);
-          courseList.appendChild(div);
-        });
-        
-          // 첫번째 과정 기본 렌더링
-        state.currentCourse = courses[0];
-        courseTitle.textContent = courses[0].courseName;
-        renderStudentTable(courses[0].courseId);
-      }
-  
-      // 토글 sidebar
-      function toggleSidebar() {
-        document.querySelector('.sidebar').classList.toggle('collapsed');
-      }
-  
-      // 토글 수정-> 생성/저장/삭제 버튼
-      function toggleEditMode(type) {
-        // type: 'course' | 'student'
-        var isEdit = !state[type + 'EditMode'];
-        state[type + 'EditMode'] = isEdit;
-  
-        var editBtn      = document.getElementById(type + 'EditBtn');
-        var editControls = document.getElementById(type + 'EditControls');
-  
-        editBtn.style.display      = isEdit ? 'none' : 'inline-block';
-        editControls.style.display = isEdit ? 'flex' : 'none';
-      }
-  
-      // active-btn
-      function saveCourseChanges() {
-        console.log('saveCourseChanges 호출됨', state.courseEditMode);
-        // TODO: Firestore 저장 로직
-        toggleEditMode('course');
-      }
-  
-      function addCourse() {
-        const courseName = prompt('과정명을 입력하세요.');
-        if (!courseName) return;
-        const instructor = prompt('강사명을 입력하세요.');
-        if (!instructor) return;
-        CourseCRUD.addCourse(courseName, instructor).then(() => renderCourseList());
-      }
-  
-      function deleteCourse() {
-        if (!state.currentCourse) { alert('삭제할 과정을 선택해주세요.'); return; }
-        if (!confirm(`"${state.currentCourse.courseName}"을 삭제하시겠습니까?`)) return;
-        CourseCRUD.deleteCourse(state.currentCourse.courseId).then(() => {
-            state.currentCourse = null;
-            courseTitle.textContent = '학생 관리';
-            tbody.innerHTML = '';
-            renderCourseList();
-        });
-      }
+          const container = document.createElement('div');
+          container.className = 'course-item-container';
 
-      function saveStudentChanges() {
-        // TODO: Firestore 저장 로직
-        toggleEditMode('student');
+          const div = document.createElement('div');
+          // 현재 선택된 과정 유지 또는 첫번째 항목 활성화
+          const isActive = currentCourse ? (currentCourse.courseId === course.courseId) : (index === 0);
+          div.className = 'course-item' + (isActive ? ' active' : '');
+          div.textContent = course.courseName;
+          
+          // 단일 클릭: 과정 선택
+          div.onclick = () => selectCourse(div, course);
+          
+          // 더블 클릭: 인라인 수정 모드 진입
+          div.ondblclick = (e) => {
+            e.stopPropagation(); // 클릭 이벤트와 겹치지 않게
+            div.classList.add('editing');
+            const originalText = course.courseName;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = originalText;
+            input.className = 'inline-edit-input';
+            
+            div.textContent = '';
+            div.appendChild(input);
+            input.focus();
+
+            // 저장 처리 로직
+            const saveChanges = async () => {
+              div.classList.remove('editing');
+              const newName = input.value.trim();
+              if(newName && newName !== originalText) {
+                const success = await CourseCRUD.updateCourse(course.courseId, { courseName: newName });
+                if(success) {
+                   course.courseName = newName; // 로컬 데이터 업데이트
+                   if(currentCourse && currentCourse.courseId === course.courseId) {
+                       courseTitle.textContent = newName;
+                   }
+                }
+              }
+              renderCourseList(); // 성공하든 실패하든 다시 그림
+            };
+
+            input.onblur = saveChanges;
+            input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); };
+          };
+
+          // 과정 개별 삭제 버튼
+          const delBtn = document.createElement('button');
+          delBtn.className = 'action-btn btn-delete-small';
+          delBtn.textContent = '삭제';
+          delBtn.onclick = async (e) => {
+              e.stopPropagation();
+              if(confirm(`"${course.courseName}" 과정을 삭제하시겠습니까?`)){
+                  await CourseCRUD.deleteCourse(course.courseId);
+                  if(currentCourse && currentCourse.courseId === course.courseId) currentCourse = null;
+                  renderCourseList();
+              }
+          };
+
+          container.appendChild(div);
+          container.appendChild(delBtn);
+          courseList.appendChild(container);
+
+          // 초기 로딩 시 첫번째 과정을 자동으로 선택
+          if (isActive && !currentCourse) {
+              selectCourse(div, course);
+          }
+        });
       }
   
-      function deleteStudent() {
-        // TODO
-      }
-  
-      // 과정 클릭 시 UI 변경 및 데이터 로드 함수
       function selectCourse(element, course) {
-          // 1. 활성화(주황색) UI 이동
           document.querySelectorAll('.course-item').forEach(el => el.classList.remove('active'));
           element.classList.add('active');
           courseTitle.textContent = course.courseName;
-          state.currentCourse = course;
-  
-          // 2. 학생 목록 테이블 렌더링
+          currentCourse = course;
           renderStudentTable(course.courseId);
       }
   
-      // 학생 테이블 그리기
+      // 2. 학생 테이블 렌더링 및 이름 인라인 에디팅 적용
       async function renderStudentTable(courseId) {
-          tbody.innerHTML = ''; // 테이블 초기화
+          tbody.innerHTML = '';
           const students = await CourseCRUD.getStudentsByCourse(courseId);
 
           if (students.length === 0) {
-              tbody.innerHTML = '<tr><td colspan="4" style="padding: 40px; color: #aaa;">등록된 학생이 없습니다.</td></tr>';
+              tbody.innerHTML = '<tr><td colspan="5" style="padding: 40px; color: #aaa;">등록된 학생이 없습니다.</td></tr>';
               return;
           }
   
           students.forEach((student, index) => {
               const tr = document.createElement('tr');
+              
+              // 이름 컬럼을 수정 가능하도록 설정
               tr.innerHTML = `
                   <td>${index + 1}</td>
-                  <td style="font-weight: bold; color: #333;">${student.name}</td>
+                  <td class="editable-cell" style="font-weight: bold; color: #333;" data-uid="${student.uid}">${student.name}</td>
                   <td><span class="role-badge student">${student.role}</span></td>
                   <td style="color: #666;">${student.email}</td>
+                  <td><button class="action-btn btn-delete-small" onclick="deleteStudentBtn('${student.uid}', '${student.name}')">삭제</button></td>
               `;
+              
+              // 학생 이름 더블클릭 이벤트 연결
+              const nameCell = tr.querySelector('.editable-cell');
+              nameCell.ondblclick = (e) => {
+                nameCell.classList.add('editing');
+                  const originalName = student.name;
+                  const input = document.createElement('input');
+                  input.type = 'text';
+                  input.value = originalName;
+                  input.className = 'inline-edit-input';
+                  input.style.width = '100px';
+
+                  nameCell.textContent = '';
+                  nameCell.appendChild(input);
+                  input.focus();
+
+                  const saveName = async () => {
+                      nameCell.classList.remove('editing');
+                      const newName = input.value.trim();
+                      if(newName && newName !== originalName) {
+                          await UserCRUD.updateUser(student.uid, { name: newName });
+                      }
+                      renderStudentTable(courseId); // 리렌더링
+                  };
+
+                  input.onblur = saveName;
+                  input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); };
+              };
+
               tbody.appendChild(tr);
           });
       }
 
-      document.getElementById('courseEditBtn').addEventListener('click', () => toggleEditMode('course'));
-      document.getElementById('studentEditBtn').addEventListener('click', () => toggleEditMode('student'));
-      document.getElementById('btnCreateCourse').addEventListener('click', addCourse);
-      document.getElementById('btnDeleteCourse').addEventListener('click', deleteCourse);
-      document.getElementById('btnSaveCourse').addEventListener('click', saveCourseChanges);
-      document.getElementById('btnDeleteStudent').addEventListener('click', deleteStudent);
-      document.getElementById('btnSaveStudent').addEventListener('click', saveStudentChanges);
+      // 과정 추가
+      document.getElementById('btnCreateCourse').addEventListener('click', async () => {
+        const courseName = prompt('추가할 과정명을 입력하세요.');
+        if (!courseName) return;
+        const instructor = prompt('담당 강사명을 입력하세요.'); // 필요시 생략 가능
+        if (!instructor) return;
+        
+        const success = await CourseCRUD.addCourse(courseName, instructor);
+        if(success) renderCourseList();
+      });
+
+      // 학생 삭제 로직 노출
+      window.deleteStudentBtn = async (uid, name) => {
+          if(confirm(`${name} 학생 데이터를 삭제하시겠습니까?`)){
+              await UserCRUD.deleteUser(uid);
+              renderStudentTable(currentCourse.courseId);
+          }
+      };
   
+      // 최초 실행
       renderCourseList();
     });
 
