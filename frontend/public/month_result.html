@@ -9,14 +9,29 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <style>
-    /* 🎨 멋쟁이사자처럼 테마 스타일 (Figma 디자인 반영) */
-    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; color: #333; }
-    header { width: 100%; padding: 20px 0; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-    .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
-    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
-    .back-btn { background-color: #f1f3f5; color: #555; border: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; cursor: pointer; position: absolute; left: 20px; top: 25px; text-decoration: none; font-weight: bold; }
-    .back-btn:hover { background-color: #e9ecef; }
-    .main-container { width: 90%; max-width: 1000px; margin: 40px 0; display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
+    input, textarea { user-select: text; }
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; min-height: 100vh; color: #333; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+    /* ✅ admin_dashboard와 통일된 헤더 */
+    header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+    .logo-area { display: flex; align-items: center; gap: 15px; }
+    .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
+    .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
+    /* ✅ 우측: 환영 텍스트 + 로그아웃 */
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .welcome-text { font-size: 13px; color: #888; }
+    .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px; }
+    #sidebarToggleBtn { background: none; border: none; font-size: 20px; cursor: pointer; color: #555; }
+    /* ✅ 전체 레이아웃 */
+    .container { display: flex; height: calc(100vh - 65px); }
+    /* 🌟 왼쪽 사이드바 */
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap; }
+    .sidebar.collapsed { width: 10px; padding: 0; }
+    .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
+    .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
+    .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
+    /* ✅ 메인 콘텐츠 중앙정렬 래퍼 */
+    .main-content { flex-grow: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; box-sizing: border-box; }
+    .main-container { width: 100%; max-width: 1000px; display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
     @media (max-width: 768px) { .main-container { grid-template-columns: 1fr; } }
     .calendar-card, .summary-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
     .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; color: #FF7710; font-weight: bold; }
@@ -50,61 +65,80 @@
     .summary-value.grade { font-size: 24px; color: #FF7710; }
     .summary-value.rate { color: #FF7710; }
     .summary-grade { display: flex; align-items: baseline; gap: 5px; }
-    .summary-grade-label { font-size: 12px; color: #aaa; margin-left: 20px;}
+    .summary-grade-label { font-size: 12px; color: #aaa; margin-left: 20px; }
     .calendar-day .day-point { position: absolute; bottom: 2px; width: 4px; height: 4px; background-color: #FF7710; border-radius: 50%; left: calc(50% - 2px); visibility: hidden; }
     .day-point.has-data { visibility: visible; }
   </style>
 </head>
 <body>
+
+  <!-- ✅ admin_dashboard와 통일된 헤더 -->
   <header>
-    <a href="/admin_dashboard.html" class="back-btn">< 수업 모니터링</a>
-    <div class="logo-text">멋쟁이사자처럼</div>
-    <div class="sub-text">월간 결과 조회</div>
+    <div class="logo-area">
+      <button id="sidebarToggleBtn">☰</button>
+      <div class="logo-text">멋쟁이사자처럼</div>
+      <div class="admin-badge" id="adminBadge" style="display:none;">Admin</div>
+    </div>
+    <!-- ✅ 우측: {이름}님 환영합니다 + 로그아웃 -->
+    <div class="header-right">
+      <span class="welcome-text" id="welcomeText"></span>
+      <button class="logout-btn" id="logoutBtn">로그아웃</button>
+    </div>
   </header>
 
-  <div class="main-container">
-    <div class="calendar-card">
-      <div class="calendar-header">
-        <button class="month-nav-btn" id="prevMonth">< 이전 달</button>
-        <span id="currentMonthTitle">2026년 3월</span>
-        <button class="month-nav-btn" id="nextMonth">다음 달 ></button>
-      </div>
-        <div style="margin-bottom: 20px;">
-          <select id="courseSelect" style="width: 100%; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 15px; font-weight: bold;">
-          </select>
-        </div>
+  <div class="container">
 
-      
-      <div class="calendar-grid">
-        <div class="day-name sun">일</div> <div class="day-name">월</div> <div class="day-name">화</div> <div class="day-name">수</div> <div class="day-name">목</div> <div class="day-name">금</div> <div class="day-name sat">토</div>
-      </div>
-      <div class="calendar-grid" id="calendarBody">
-        </div>
+    <!-- 🌟 왼쪽 사이드바 (admin_dashboard와 동일 메뉴) -->
+    <div class="sidebar" id="sidebar">
+      <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
+      <a href="/month_result.html" class="menu-item active">월간 결과 조회</a>
+      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
+      <a href="/course_manage.html" class="menu-item">과정 관리</a>
     </div>
 
-    <div class="summary-card">
-      <div class="summary-title">📈 결과 요약</div>
-      
-      <div class="summary-item">
-        <div class="summary-label">이번 주 평균 점수</div>
-        <div class="summary-value rate" id="weeklyScore">- %</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">이번 주 등급</div>
-        <div class="summary-grade">
-            <div class="summary-value grade" id="weeklyGrade">-</div>
-        </div>
-      </div>
+    <!-- ✅ 중앙정렬 래퍼 -->
+    <div class="main-content">
+      <div class="main-container">
 
-      <div class="summary-item" style="margin-top: 20px;">
-        <div class="summary-label">이번 달 평균 점수</div>
-        <div class="summary-value rate" id="monthlyScore">- %</div>
-      </div>
-      <div class="summary-item">
-        <div class="summary-label">이번 달 등급</div>
-        <div class="summary-grade">
-            <div class="summary-value grade" id="monthlyGrade">-</div>
+        <div class="calendar-card">
+          <div class="calendar-header">
+            <button class="month-nav-btn" id="prevMonth">< 이전 달</button>
+            <span id="currentMonthTitle">2026년 3월</span>
+            <button class="month-nav-btn" id="nextMonth">다음 달 ></button>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <select id="courseSelect" style="width: 100%; padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 15px; font-weight: bold;"></select>
+          </div>
+          <div class="calendar-grid">
+            <div class="day-name sun">일</div> <div class="day-name">월</div> <div class="day-name">화</div> <div class="day-name">수</div> <div class="day-name">목</div> <div class="day-name">금</div> <div class="day-name sat">토</div>
+          </div>
+          <div class="calendar-grid" id="calendarBody"></div>
         </div>
+
+        <div class="summary-card">
+          <div class="summary-title">📈 결과 요약</div>
+          <div class="summary-item">
+            <div class="summary-label">이번 주 평균 점수</div>
+            <div class="summary-value rate" id="weeklyScore">- %</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">이번 주 등급</div>
+            <div class="summary-grade">
+              <div class="summary-value grade" id="weeklyGrade">-</div>
+            </div>
+          </div>
+          <div class="summary-item" style="margin-top: 20px;">
+            <div class="summary-label">이번 달 평균 점수</div>
+            <div class="summary-value rate" id="monthlyScore">- %</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">이번 달 등급</div>
+            <div class="summary-grade">
+              <div class="summary-value grade" id="monthlyGrade">-</div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -361,6 +395,19 @@
       const userDoc = await UserCRUD.getUser(user.uid);
       console.log('[onAuthStateChanged] userDoc:', userDoc);
       if (!userDoc) { window.location.href = '/'; return; }
+
+      document.getElementById('welcomeText').textContent = `${userDoc.name}님 환영합니다`;
+      if (userDoc.role === 'admin') document.getElementById('adminBadge').style.display = 'inline-block';
+
+      // ✅ 사이드바 토글
+      document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+      });
+
+      // ✅ 로그아웃
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        auth.signOut().then(() => { window.location.href = '/'; });
+      });
 
       const courseSelect = document.getElementById('courseSelect');
       const courses = await CourseCRUD.getCourses();

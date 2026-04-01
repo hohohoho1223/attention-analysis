@@ -10,17 +10,34 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
+    /* 전체 드래그 방지 */
+    body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+    /* 입력창은 예외 */
+    input, textarea { user-select: text; }
     /* 🎨 멋사 시그니처 테마 */
-    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: stretch; color: #333; min-height: 100vh; }
-    header { width: 100%; padding: 20px 0; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: relative; }
-    .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
-    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
-    .back-btn { background-color: #f1f3f5; color: #555; border: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; cursor: pointer; position: absolute; left: 40px; top: 25px; text-decoration: none; font-weight: bold; transition: 0.2s; }
-    .back-btn:hover { background-color: #e9ecef; color: #FF7710; }
-    
-    .container { width: 90%; max-width: 1000px; margin: 40px auto; }
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; min-height: 100vh; }
+    /* ✅ admin_dashboard와 통일된 헤더 */
+    header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+    .logo-area { display: flex; align-items: center; gap: 15px; }
+    .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
+    .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
+    /* ✅ 우측: 환영 텍스트 + 로그아웃 */
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .welcome-text { font-size: 13px; color: #888; }
+    .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px; }
+    #sidebarToggleBtn { background: none; border: none; font-size: 20px; cursor: pointer; color: #555; }
+    /* ✅ 전체 레이아웃 */
+    .layout { display: flex; height: calc(100vh - 65px); }
+    /* 🌟 왼쪽 사이드바 */
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap; }
+    .sidebar.collapsed { width: 10px; padding: 0; }
+    .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
+    .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
+    .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
+    /* ✅ 메인 콘텐츠 중앙정렬 래퍼 */
+    .main-content { flex-grow: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; box-sizing: border-box; }
+    .container { width: 100%; max-width: 1000px; }
     .page-title { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 20px; border-left: 5px solid #FF7710; padding-left: 15px; }
-    
     /* 📊 상단 요약 카드 */
     .stats-container { display: flex; gap: 20px; margin-bottom: 30px; }
     .stat-card { flex: 1; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; border-bottom: 3px solid transparent; transition: 0.3s; }
@@ -30,7 +47,6 @@
     .stat-value.highlight { color: #FF7710; }
     .stat-value.good { color: #28a745; }
     .stat-value.bad { color: #dc3545; }
-
     /* 📈 그래프 영역 */
     .chart-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
     .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -40,49 +56,72 @@
 </head>
 <body style="display:none;">
 
+  <!-- ✅ admin_dashboard와 통일된 헤더 -->
   <header>
-    <a href="/admin_dashboard.html" class="back-btn">< 대시보드로 돌아가기</a>
-    <div class="logo-text">멋쟁이사자처럼</div>
-    <div class="sub-text">수업별 타임라인</div>
+    <div class="logo-area">
+      <button id="sidebarToggleBtn">☰</button>
+      <div class="logo-text">멋쟁이사자처럼</div>
+      <div class="admin-badge" id="adminBadge" style="display:none;">Admin</div>
+    </div>
+    <!-- ✅ 우측: {이름}님 환영합니다 + 로그아웃 -->
+    <div class="header-right">
+      <span class="welcome-text" id="welcomeText"></span>
+      <button class="logout-btn" id="logoutBtn">로그아웃</button>
+    </div>
   </header>
 
-  <div class="container">
-    
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-      <div class="page-title" id="pageTitle">수업 집중 평균</div>
-        <div style="display: flex; gap: 10px;">
+  <!-- ✅ 사이드바 + 메인 분리 -->
+  <div class="layout">
+
+    <!-- 🌟 왼쪽 사이드바 (admin_dashboard와 동일 메뉴) -->
+    <div class="sidebar" id="sidebar">
+      <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
+      <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
+      <a href="/course_timeline.html" class="menu-item active">수업별 타임라인</a>
+      <a href="/course_manage.html" class="menu-item">과정 관리</a>
+    </div>
+
+    <!-- ✅ 중앙정렬 래퍼 -->
+    <div class="main-content">
+      <div class="container">
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+          <div class="page-title" id="pageTitle">수업 집중 평균</div>
+          <div style="display: flex; gap: 10px;">
             <select id="coursePicker">수업목록</select>
             <input type="date" id="datePicker">
+          </div>
         </div>
-    </div>
 
-    <div class="stats-container">
-      <div class="stat-card">
-        <div class="stat-label">평균 집중도</div>
-        <div class="stat-value highlight" id="avgScore">- %</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">최고 집중도</div>
-        <div class="stat-value good" id="maxScore">- %</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">최저 집중도</div>
-        <div class="stat-value bad" id="minScore">- %</div>
-      </div>
-    </div>
-
-    <div class="chart-card">
-      <div class="chart-header">
-        <div class="chart-title">🕒 수업 시간별 집중도 변화</div>
-      </div>
-      <div class="chart-wrapper">
-        <div id="noDataMsg" style="display:none; text-align:center; padding: 40px; color: #999;">
-            선택한 날짜의 데이터가 없습니다.
+        <div class="stats-container">
+          <div class="stat-card">
+            <div class="stat-label">평균 집중도</div>
+            <div class="stat-value highlight" id="avgScore">- %</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">최고 집중도</div>
+            <div class="stat-value good" id="maxScore">- %</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">최저 집중도</div>
+            <div class="stat-value bad" id="minScore">- %</div>
+          </div>
         </div>
-        <canvas id="focusTimelineChart"></canvas>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">🕒 수업 시간별 집중도 변화</div>
+          </div>
+          <div class="chart-wrapper">
+            <div id="noDataMsg" style="display:none; text-align:center; padding: 40px; color: #999;">선택한 날짜의 데이터가 없습니다.</div>
+            <canvas id="focusTimelineChart"></canvas>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
+
 
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
@@ -98,7 +137,10 @@
       
       const userDoc = await UserCRUD.getUser(user.uid);
       if (!userDoc || userDoc.role !== 'admin') { window.location.href = '/'; return; }
-      
+
+      // ✅ 환영 텍스트 + admin 뱃지
+      document.getElementById('welcomeText').textContent = `${userDoc.name}님 환영합니다`;
+      if (userDoc.role === 'admin') document.getElementById('adminBadge').style.display = 'inline-block';
       document.body.style.display = 'block';
 
       // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
@@ -254,10 +296,15 @@
         }
 
         renderChart(data.timelineScore, data.avgScore, data.maxScore, data.minScore);
-  
       }
-
+    });
       
+    document.getElementById('sidebarToggleBtn')
+      .addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+      });
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      auth.signOut().then(() => { window.location.href = '/'; });
     });
 
   </script>

@@ -7,50 +7,54 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  
+
   <style>
+    /* 전체 드래그 방지 */
+    body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+    /* 입력창은 예외 */
+    input, textarea { user-select: text; }
     /* 🎨 멋사 시그니처 & 관리자 공통 테마 */
     .sidebar, .panel-title, .b { user-select: none; } /* .course-item 은 더블클릭을 위해 user-select 해제 */
     body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; }
+    /* ✅ admin_dashboard와 통일된 헤더 */
     header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
     .logo-area { display: flex; align-items: center; gap: 15px; }
     .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
     .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
-    
+    /* ✅ 우측: 환영 텍스트 + 로그아웃 */
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .welcome-text { font-size: 13px; color: #888; }
+    .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px; }
+    #sidebarToggleBtn { background: none; border: none; font-size: 20px; cursor: pointer; color: #555; }
+    /* ✅ 전체 레이아웃 */
     .container { display: flex; height: calc(100vh - 65px); }
-    
     /* 🌟 왼쪽 사이드바 */
-    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap;}
-    .sidebar.collapsed {width: 0; padding: 0;}
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap; }
+    .sidebar.collapsed { width: 10px; padding: 0; }
     .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
     .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
     .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
-
     /* 🌟 메인 컨텐츠 영역 */
     .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; display: flex; gap: 30px; }
-    
     /* 왼쪽: 과정 목록 패널 */
     .course-panel { width: 250px; flex: 1; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); height: fit-content; }
     .panel-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #FF7710; display: flex; justify-content: space-between; align-items: center; }
-    
     /* 과정 항목 스타일 수정: 더블클릭 힌트 추가 */
     .course-item-container { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
     .course-item { flex-grow: 1; padding: 12px 15px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 6px; cursor: pointer; transition: 0.2s; font-size: 14px; font-weight: bold; color: #555; position: relative; }
     .course-item:hover::after { content: "더블클릭하여 수정"; position: absolute; right: 10px; font-size: 11px; color: #aaa; }
     .course-item:hover { border-color: #FF7710; color: #FF7710; }
     .course-item.active { background-color: #FF7710; color: white; border-color: #FF7710; box-shadow: 0 2px 8px rgba(255,119,16,0.3); }
-    .course-item.active:hover::after { color: #fff; opacity: 0.7;}
-    .inline-edit-input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #FF7710; border-radius: 4px; font-size: 14px; font-family: inherit;}
+    .course-item.active:hover::after { color: #fff; opacity: 0.7; }
+    .inline-edit-input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #FF7710; border-radius: 4px; font-size: 14px; font-family: inherit; }
     .course-item.editing::after { display: none !important; }
     .editable-cell.editing::after { display: none !important; }
-
     /* 오른쪽: 학생 관리 테이블 패널 */
     .student-panel { flex-grow: 1; flex: 3; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-    .action-btn { padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 12px; border: 1px solid #ddd; background-color: #fff;}
+    .action-btn { padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 12px; border: 1px solid #ddd; background-color: #fff; }
     .action-btn:hover { background-color: #f1f3f5; }
-    .btn-delete-small { color: #dc3545; border-color: #dc3545;}
-    .btn-delete-small:hover { background-color: #dc3545; color: white;}
-
+    .btn-delete-small { color: #dc3545; border-color: #dc3545; }
+    .btn-delete-small:hover { background-color: #dc3545; color: white; }
     table { width: 100%; border-collapse: collapse; }
     thead { background-color: #fcfcfc; border-top: 1px solid #ddd; border-bottom: 2px solid #eee; }
     th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; font-size: 14px; }
@@ -58,32 +62,39 @@
     tbody tr:hover { background-color: #fffaf0; }
     .role-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; background-color: #e9ecef; color: #495057; }
     .role-badge.student { background-color: #e0f3ff; color: #007bff; }
-    
     .editable-cell { cursor: pointer; position: relative; }
-    .editable-cell:hover::after { content: "✏️"; position: absolute; right: 5px; opacity: 0.5;}
+    .editable-cell:hover::after { content: "✏️"; position: absolute; right: 5px; opacity: 0.5; }
   </style>
 </head>
 <body style="display:none;">
 
+  <!-- ✅ admin_dashboard와 통일된 헤더 -->
   <header>
     <div class="logo-area">
-      <button id="sidebarToggleBtn" onclick="toggleSidebar()" 
-        style="background:none; cursor:pointer; border:none; font-size:20px; color:#555;">☰</button>
+      <button id="sidebarToggleBtn">☰</button>
       <div class="logo-text">멋쟁이사자처럼</div>
-      <div class="admin-badge">Admin</div>
+      <!-- ✅ JS에서 admin일 때만 표시 -->
+      <div class="admin-badge" id="adminBadge" style="display:none;">Admin</div>
+    </div>
+    <!-- ✅ 우측: {이름}님 환영합니다 + 로그아웃 -->
+    <div class="header-right">
+      <span class="welcome-text" id="welcomeText"></span>
+      <button class="logout-btn" id="logoutBtn">로그아웃</button>
     </div>
   </header>
 
   <div class="container">
-    <div class="sidebar">
+
+    <!-- 🌟 왼쪽 사이드바 (admin_dashboard와 동일 메뉴) -->
+    <div class="sidebar" id="sidebar">
       <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
       <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
-      <a href="/course_timeline.html" class="menu-item">과정별 집중도</a>
-      <a href="#" class="menu-item active">과정 관리</a>
+      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
+      <a href="/course_manage.html" class="menu-item active">과정 관리</a>
     </div>
 
     <div class="main-content">
-      
+
       <div class="course-panel">
         <div class="panel-title">
           <span>과정 목록</span>
@@ -95,8 +106,7 @@
       <div class="student-panel">
         <div class="panel-title">
           <span id="currentCourseTitle">학생 관리</span>
-          </div>
-
+        </div>
         <table>
           <thead>
             <tr>
@@ -107,8 +117,7 @@
               <th>관리</th>
             </tr>
           </thead>
-          <tbody id="student-list-body">
-          </tbody>
+          <tbody id="student-list-body"></tbody>
         </table>
       </div>
 
@@ -121,10 +130,6 @@
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/course.js"></script>
   <script>
-    function toggleSidebar() {
-      document.querySelector('.sidebar').classList.toggle('collapsed');
-    }
-
     auth.onAuthStateChanged(async (user) => {
       if (!user) { window.location.href = '/'; return; }
       
@@ -133,6 +138,10 @@
         window.location.href = '/'; 
         return; 
       }
+      // ✅ 환영 텍스트 + admin 뱃지
+      document.getElementById('welcomeText').textContent = `${userDoc.name}님 환영합니다`;
+      if (userDoc.role === 'admin') document.getElementById('adminBadge').style.display = 'inline-block';
+      
       document.body.style.display = 'block';
 
       const tbody = document.getElementById('student-list-body');
@@ -308,6 +317,11 @@
       // 최초 실행
       renderCourseList();
     });
+
+    document.getElementById('sidebarToggleBtn')
+      .addEventListener('click', () => {
+        document.getElementById('.sidebar').classList.toggle('collapsed');
+      });
 
   </script>
 </body>
