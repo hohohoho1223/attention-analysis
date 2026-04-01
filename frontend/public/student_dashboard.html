@@ -185,13 +185,39 @@
 
       const attentionState = latestAttentionState;
 
-      if (isClassStarted && Number.isFinite(attentionState.score)) {
+      // calibration 상태일 때 안내 메시지 변경
+      if (isClassStarted) {
+        if (attentionState.state === 'CALIBRATING') {
+          waitingOverlay.style.display = 'flex';
+          waitingOverlay.style.opacity = '1';
+
+          const calibMsg = attentionState.eye_status_msg || '';
+          
+          if (calibMsg.includes('Calibrating')) {
+            waitingOverlay.textContent = `눈 인식중입니다. 정면을 바라봐주세요. (${calibMsg})`;
+          } else {
+            waitingOverlay.textContent = '눈 인식중입니다. 정면을 바라봐주세요.';
+          }
+        } else {
+          waitingOverlay.style.opacity = '0';
+          setTimeout(() => {
+            waitingOverlay.style.display = 'none';
+          }, 300);
+        }
+      }
+
+      if (
+        isClassStarted &&
+        Number.isFinite(attentionState.score) &&
+        attentionState.state !== 'CALIBRATING'
+      ) {
         sessionScores.push(attentionState.score);
       }
 
       if (realtimeStatus && isClassStarted) {
         let statusKOR = '대기중';
-        if (attentionState.state === 'FOCUSED') statusKOR = '집중';
+        if (attentionState.state === 'CALIBRATING') statusKOR = '눈 인식 중...';
+        else if (attentionState.state === 'FOCUSED') statusKOR = '집중';
         else if (attentionState.state === 'PARTIAL_FOCUS') statusKOR = '집중 저하';
         else if (attentionState.state === 'LOST_FOCUS') statusKOR = '이탈';
         else if (attentionState.state === 'ABSENT') statusKOR = '자리비움';
@@ -349,6 +375,12 @@
                   realtimeStatus,
                   sessionScores
                 });
+
+                // ✅ 수업 종료 시 종료 화면 표시
+                webcamSection.style.display = 'none';
+                waitingOverlay.style.display = 'none';
+                endSection.style.display = 'flex';
+
                 hasClassStarted = false; 
                 isClassStarted = false; 
                 sessionScores = [];

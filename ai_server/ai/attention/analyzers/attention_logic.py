@@ -235,6 +235,12 @@ class AttentionAnalyzer:
         self.state.eye_focus_score = eye_focus_score
         self.state.eye_status_msg = eye_status_msg
 
+        # calibration 상태 감지 (gaze 안정화 전)
+        if gaze_direction == "Unknown" and self.state.no_face_duration < 1.0:
+            self.state.state = "CALIBRATING"
+            self.state.is_fixated = False
+            return self.state
+
         if is_drowsy:
             self.state.state = "DROWSY"
             self.state.score = max(0.0, self.state.score - 8.0 * dt) # 초당 8점 삭감
