@@ -14,7 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 
   <style>
-    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; height: 100vh; position: relative; }
     header { width: 100%; padding: 20px; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 40px; }
     .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
     .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
@@ -25,12 +25,13 @@
     video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; }
     .waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; z-index: 10; transition: opacity 0.5s ease; }
-    .exit-btn { background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; font-weight: bold; }
-    .exit-btn:disabled { background-color: #aaa; cursor: not-allowed; }
-
+    
     #end-section { display: none; width: 100%; height: 50vh; justify-content: center; align-items: center; flex-direction: column; }
     .end-msg { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 20px; }
     .end-sub { color: #666; font-size: 16px; }
+
+    /* ✅ 추가: 은밀한 회원탈퇴 버튼 */
+    .withdraw-btn { position: absolute; bottom: 20px; right: 20px; background: none; border: none; color: #bbb; font-size: 12px; cursor: pointer; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -42,8 +43,7 @@
   <div id="webcam-section">
     <div class="welcome-msg">
       🦁 <span id="display-name"></span>님 환영합니다!
-      <!-- <button class="exit-btn" id="exitBtn">수업 나가기</button> -->
-    </div>
+      </div>
     <div class="video-container">
       <video id="webcam" autoplay playsinline muted></video>
       <canvas id="output_canvas"></canvas>
@@ -55,6 +55,8 @@
     <div class="end-msg">수업이 종료되었습니다.</div>
     <div class="end-sub">오늘 하루도 고생 많으셨습니다! 창을 닫아주세요.</div>
   </div>
+
+  <button class="withdraw-btn" id="withdrawBtn">회원 탈퇴</button>
 
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
@@ -91,11 +93,10 @@
     let userDoc = null;
     let realtimeStatus = null;
     let sessionScores = [];
-    let continuousFail = 0; // 연속 저장 실패 횟수
+    let continuousFail = 0; 
 
-    // 임시저장(1분) 및 타임라인(10분)
-    let tempInterval = null; // 1분
-    let timelineInterval = null // 10분
+    let tempInterval = null; 
+    let timelineInterval = null;
 
     let latestAttentionState = new RemoteAttentionState();
     let isRemoteAnalyzing = false;
@@ -172,7 +173,6 @@
 
       if (isClassStarted && Number.isFinite(attentionState.score)) {
         sessionScores.push(attentionState.score);
-
         console.log('[score]', attentionState.score, attentionState.state, {
           faceDetected,
           remoteDrowsy: attentionState?.cnn?.is_drowsy ?? false,
@@ -187,7 +187,6 @@
         else if (attentionState.state === 'ABSENT') statusKOR = '자리비움';
         else if (attentionState.state === 'DROWSY') statusKOR = '🚨 졸음 🚨';
 
-        // 순간 점수 대신 버퍼 평균으로 스무딩
         const displayScore = sessionScores.length > 0
           ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length)
           : 0;
@@ -200,9 +199,6 @@
       canvasCtx.restore();
     });
         
-
-
-    // 오늘 날짜
     let today = new Date().toISOString().split('T')[0];  
 
     auth.onAuthStateChanged(async (user) => {
@@ -224,6 +220,44 @@
       displayName.textContent = userDoc.name;
       webcamSection.style.display = 'block';
       currentUser = user;
+
+      // 회웥 탈퇴
+      const withdrawBtn = document.getElementById('withdrawBtn');
+
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', async () => {
+          const confirmDelete = confirm("정말 탈퇴하시겠습니까? 과정 중 탈퇴 시 불이익을 받을 수 있습니다.");
+
+          if (!confirmDelete) return;
+
+          try {
+            const uid = currentUser.uid;
+
+            // 1️. realtime 제거
+            if (realtimeStatus && userDoc) {
+              await db.collection(COL_COURSES).doc(userDoc.courseId)
+                .collection('realtime').doc(uid)
+                .delete();
+            }
+
+            // 2️. Firestore 유저 데이터 삭제
+            const isDeleted = await UserCRUD.deleteUser(uid);
+            if (!isDeleted) throw new Error("Firestore 삭제 실패");
+
+            // 3️. Firebase Auth 계정 삭제 (중요)
+            await currentUser.delete();
+
+            alert("회원 탈퇴가 완료되었습니다.");
+
+            // 4️. 홈으로 이동
+            window.location.href = '/';
+
+          } catch (error) {
+            console.error("회원 탈퇴 실패:", error);
+            alert("탈퇴 중 오류가 발생했습니다.");
+          }
+        });
+      }
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -249,8 +283,7 @@
         }
       }, 500);
 
-      let hasClassStarted = false; // 수업이 한 번이라도 시작했는지
-
+      let hasClassStarted = false; 
 
       const today = new Date().toISOString().split('T')[0];
       db.collection(COL_COURSES).doc(userDoc.courseId)
@@ -259,6 +292,7 @@
           if (doc.exists) {
             isClassStarted = doc.data().isStarted === true;
             if (isClassStarted) {
+              hasClassStarted = true; 
               waitingOverlay.style.opacity = '0';
               setTimeout(() => {
                 waitingOverlay.style.display = 'none';
@@ -272,7 +306,7 @@
               realtimeStatus.currentScore = null;
               RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
 
-              if (hasClassStarted) { // 한 번이라도 시작됐을 때만 정산
+              if (hasClassStarted) { 
                 await finalizeSession({
                   userId: currentUser?.uid,
                   courseId: userDoc?.courseId,
@@ -281,21 +315,17 @@
                   realtimeStatus,
                   sessionScores
                 });
-
-                // 리셋
                 hasClassStarted = false; 
-                isClassStarted = false; // 수업 상태 꺼짐으로 변경
+                isClassStarted = false; 
                 sessionScores = [];
               }
             }
           }
         });
 
-      // 1분 타이머(임시저장)
       console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
 
       tempInterval = setInterval(async () => {
-
         if (!isClassStarted || sessionScores.length === 0) return;
         const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
         const isSuccess = await DailyTLCRUD.addTempScore(currentUser.uid, today, avg);
@@ -306,13 +336,11 @@
           continuousFail += 1;
           if (continuousFail >= 3) {
             alert('네트워크 연결이 불안정합니다. 인터넷 연결을 확인해주세요.');
-
             if (realtimeStatus) {
               realtimeStatus.status = 'N/A';
               realtimeStatus.currentScore = null;
               await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
             }
-
             clearInterval(tempInterval);
             clearInterval(timelineInterval);
             clearInterval(aiInterval);
@@ -322,7 +350,6 @@
             waitingOverlay.textContent = '네트워크 오류로 분석이 중단되었습니다. 새로고침이 필요합니다. 🔌';
           }
         }
-
       }, 60000);
 
       timelineInterval = setInterval(async () => {
@@ -332,34 +359,19 @@
       }, 600000);
     });
 
-    // admin에서 수업 종료
-    async function finalizeSession({
-      userId,
-      courseId,
-      today,
-      userDoc,
-      realtimeStatus,
-      sessionScores
-    }) {
-      // 1. 1분 미만 값이어도 임시 저장
+    async function finalizeSession({ userId, courseId, today, userDoc, realtimeStatus, sessionScores }) {
       if (sessionScores.length > 0) {
         const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
         await DailyTLCRUD.addTempScore(userId, today, avg);
       }
-
-      // 2. 타임라인 정산
       await DailyTLCRUD.updateTimelineScore(userId, today);
-
-      // 3. totalScore 계산 및 daily_report 저장
       const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
       await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
 
-      // 모든 타이머 중지
-      if (aiInterval) clearInterval(aiInterval); // AI
-      if (tempInterval) clearInterval(tempInterval); // 1분 저장
-      if (timelineInterval) clearInterval(timelineInterval); // 10분 저장
+      if (aiInterval) clearInterval(aiInterval); 
+      if (tempInterval) clearInterval(tempInterval); 
+      if (timelineInterval) clearInterval(timelineInterval); 
     }
-
 
     // 브라우저 창을 닫으면 realtime 삭제
     window.addEventListener('beforeunload', () => {
@@ -375,20 +387,21 @@
         }
     });
 
-    exitBtn.addEventListener('click', async () => {
-      if (realtimeStatus && userDoc && currentUser) {
-        await db.collection(COL_COURSES).doc(userDoc.courseId)
-          .collection('realtime').doc(currentUser.uid)
-          .delete();
-      }
-
-      if (videoElement.srcObject) {
-        videoElement.srcObject.getTracks().forEach(track => track.stop());
-      }
-
-      webcamSection.style.display = 'none';
-      endSection.style.display = 'flex';
-    });
+    // ✅ 에러 방어: UI에서 버튼을 날렸기 때문에 if문으로 감싸서 안전하게 처리
+    if (exitBtn) {
+        exitBtn.addEventListener('click', async () => {
+          if (realtimeStatus && userDoc && currentUser) {
+            await db.collection(COL_COURSES).doc(userDoc.courseId)
+              .collection('realtime').doc(currentUser.uid)
+              .delete();
+          }
+          if (videoElement.srcObject) {
+            videoElement.srcObject.getTracks().forEach(track => track.stop());
+          }
+          webcamSection.style.display = 'none';
+          endSection.style.display = 'flex';
+        });
+    }
   </script>
 </body>
 </html>
