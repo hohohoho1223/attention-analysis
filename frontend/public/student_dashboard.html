@@ -375,6 +375,12 @@
                   realtimeStatus,
                   sessionScores
                 });
+
+                // ✅ 수업 종료 시 종료 화면 표시
+                webcamSection.style.display = 'none';
+                waitingOverlay.style.display = 'none';
+                endSection.style.display = 'flex';
+
                 hasClassStarted = false; 
                 isClassStarted = false; 
                 sessionScores = [];
