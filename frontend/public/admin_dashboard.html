@@ -74,7 +74,7 @@
   </header>
 
   <div class="container">
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
       <a href="/admin_dashboard.html" class="menu-item active">수업 모니터링</a>
       <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
       <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
@@ -318,7 +318,7 @@
         // 사이드바 접기/펴기
         document.getElementById('sidebarToggleBtn')
           .addEventListener('click', () => {
-            document.getElementById('.sidebar').classList.toggle('collapsed');
+            document.getElementById('sidebar').classList.toggle('collapsed');
           });
   </script>
 </body>
