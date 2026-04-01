@@ -239,8 +239,8 @@ class AttentionAnalyzer:
         self.state.eye_focus_score = eye_focus_score
         self.state.eye_status_msg = eye_status_msg
 
-        # calibration 상태 감지 (gaze 안정화 전)
-        if gaze_direction == "Unknown" and self.state.no_face_duration < 1.0:
+        # calibration 상태 감지 (얼굴이 보이는 상태에서만 수행)
+        if face_detected and gaze_direction == "Unknown" and self.state.no_face_duration < 1.0:
             self.state.state = "CALIBRATING"
             self.state.is_fixated = False
             return self.state
