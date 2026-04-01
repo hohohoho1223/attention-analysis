@@ -8,13 +8,13 @@
 // 4. 아래 값들을 복사해서 교체
 //
 const firebaseConfig = {
-  apiKey: "AIzaSyCGJ9PzArXNTZx-1uqpJp6AaZLXXo9Cpjw",
-  authDomain: "cv-focus-system.firebaseapp.com",
-  projectId: "cv-focus-system",
-  storageBucket: "cv-focus-system.firebasestorage.app",
-  messagingSenderId: "635999713897",
-  appId: "1:635999713897:web:e4af6ae707a1174439c0f8",
-  measurementId: "G-ZE8BC4E9X8"
+  apiKey: "AIzaSyBS9mth1__9GWsaSIm4tt0psQFlWbvlZ9I",
+  authDomain: "cv-focus-system-v2.firebaseapp.com",
+  projectId: "cv-focus-system-v2",
+  storageBucket: "cv-focus-system-v2.firebasestorage.app",
+  messagingSenderId: "821677717550",
+  appId: "1:821677717550:web:c639beb861dcbfa96587bf",
+  measurementId: "G-Q2PYRSGG8X"
 };
 
 // collection 이름 정의
