@@ -131,7 +131,19 @@
           remoteAttentionEngine.analyzeFrame(videoElement, 2.0)
             .then((state) => {
               latestAttentionState = state;
-              console.log('[RemoteAttentionEngine] state', state);
+              // FIXATED 여부 
+              const isFixated = state.is_fixated;
+
+              // face_direction (yaw 기준)
+              let faceDirection = 'Center';
+              if (state.pose?.yaw > 15) faceDirection = 'Left';
+              else if (state.pose?.yaw < -15) faceDirection = 'Right';
+
+              console.log('[RemoteAttentionEngine] state', {
+                ...state,
+                isFixated,
+                faceDirection,
+              });
             })
             .catch((err) => {
               console.error('[RemoteAttentionEngine] analyzeFrame failed', err);

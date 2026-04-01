@@ -322,12 +322,14 @@ class FrameAnalyzerSession:
             eye_status_msg=self.eye_status_msg,
             is_drowsy=is_drowsy,
         )
-
+        
+        # FastAPI가 JSON으로 변환해서 HTTP 응답으로 보냄
         return {
             'state': attention_state.state,
             'score': float(attention_state.score),
             'face_detected': bool(self.face_detected),
             'gaze_direction': self.gaze_direction,
+            'is_fixated': bool(attention_state.is_fixated),
             'blink_bpm': int(self.blink_bpm),
             'eye_focus_score': float(self.eye_focus_score),
             'eye_status_msg': self.eye_status_msg,

@@ -73,7 +73,8 @@ class RemoteAttentionEngine {
             const text = await response.text();
             throw new Error(`AI analyze failed: ${response.status} ${text}`);
         }
-
+        
+        // main.py return 값을 받는 구간 { state, score, face_detected, gaze_direction, blink_bpm, eye_focus_score, eye_status_msg, pose, body, durations, cnn } 형태의 JSON이므로 그대로 RemoteAttentionState로 매핑 
         const data = await response.json();
         this.lastState = new RemoteAttentionState(data);
         return this.lastState;
