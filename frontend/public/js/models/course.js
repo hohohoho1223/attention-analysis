@@ -20,10 +20,11 @@ class Course {
 
 // 수업별 타임라인
 class CourseTimeline {
-    constructor(date, isStarted, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
+    constructor(date, isStarted, isCalculated, avgScore, maxScore, minScore, timelineScore = [], studentCount = 0){
         this._date = date;
 
         this.isStarted = isStarted;
+        this.isCalculated = isCalculated;
         this.avgScore = avgScore;
         this.maxScore = maxScore;
         this.minScore = minScore;
@@ -40,9 +41,9 @@ const courseConverter = {
         return new Course(
             snapshot.id, 
             data.courseName,
-      data.instructor,
-      data.isActive ?? true,
-      data.createdAt || null,
+            data.instructor,
+            data.isActive ?? true,
+            data.createdAt || null,
     );
   },
 
@@ -63,6 +64,7 @@ const courseTLConverter = {
     return new CourseTimeline(
       snapshot.id, 
       data.isStarted ?? true,
+      data.isCalculated ?? false,
       data.avgScore || 0,
       data.maxScore || 0,
       data.minScore || 0,
@@ -75,6 +77,7 @@ const courseTLConverter = {
     return { 
       // date
       isStarted: courseTL.isStarted,
+      isCalculated: courseTL.isCalculated,
       avgScore: courseTL.avgScore,
       maxScore: courseTL.maxScore,
       minScore: courseTL.minScore,

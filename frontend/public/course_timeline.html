@@ -14,6 +14,7 @@
     body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: stretch; color: #333; min-height: 100vh; }
     header { width: 100%; padding: 20px 0; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: relative; }
     .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
+    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
     .back-btn { background-color: #f1f3f5; color: #555; border: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; cursor: pointer; position: absolute; left: 40px; top: 25px; text-decoration: none; font-weight: bold; transition: 0.2s; }
     .back-btn:hover { background-color: #e9ecef; color: #FF7710; }
     
@@ -42,12 +43,13 @@
   <header>
     <a href="/admin_dashboard.html" class="back-btn">< 대시보드로 돌아가기</a>
     <div class="logo-text">멋쟁이사자처럼</div>
+    <div class="sub-text">수업별 타임라인</div>
   </header>
 
   <div class="container">
     
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-      <div class="page-title" id="pageTitle">수업별 타임라인</div>
+      <div class="page-title" id="pageTitle">수업 집중 평균</div>
         <div style="display: flex; gap: 10px;">
             <select id="coursePicker">수업목록</select>
             <input type="date" id="datePicker">
@@ -85,8 +87,10 @@
   <script src="/js/firebase-config.js"></script>
   <script src="/js/models/user.js"></script>
   <script src="/js/models/course.js"></script>
+  <script src="/js/models/student_report.js"></script>
   <script src="/js/crud/user.js"></script>
   <script src="/js/crud/course.js"></script>
+  <script src="/js/crud/student_report.js"></script>
   
   <script>
     auth.onAuthStateChanged(async (user) => {
@@ -106,6 +110,97 @@
       const coursePicker = document.getElementById('coursePicker');
       
       datePicker.value = today;
+
+      // 2. 그래프 그리는 함수 정의
+      function renderChart(timelineScore, avgScore, maxScore, minScore) {
+        document.getElementById('noDataMsg').style.display = 'none';
+        document.getElementById('focusTimelineChart').style.display = 'block';
+        document.getElementById('avgScore').textContent = `${avgScore}%`;
+        document.getElementById('maxScore').textContent = `${maxScore}%`;
+        document.getElementById('minScore').textContent = `${minScore}%`;
+
+        // ✅ 20개로 샘플링
+        const MAX_POINTS = 20;
+        let sampledData = [];
+
+        if (timelineScore.length <= MAX_POINTS) {
+            sampledData = timelineScore;
+        } else {
+            const chunkSize = timelineScore.length / MAX_POINTS;
+            for (let i = 0; i < MAX_POINTS; i++) {
+                const start = Math.floor(i * chunkSize);
+                const end = Math.floor((i + 1) * chunkSize);
+                const chunk = timelineScore.slice(start, end);
+                const avg = Math.round(chunk.reduce((a, b) => a + b, 0) / chunk.length);
+                sampledData.push(avg);
+            }
+        }
+
+        // ✅ 라벨 생성 (index 1개 = 10초 기준)
+        const totalSeconds = timelineScore.length * 10; // 원본 길이 기준 총 시간
+        const pointCount = sampledData.length;
+
+        function formatTime(seconds) {
+            if (seconds < 60) return `${seconds}초`;
+            if (seconds < 3600) {
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                return s === 0 ? `${m}분` : `${m}분${s}초`;
+            }
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return m === 0 ? `${h}시간` : `${h}시간${m}분`;
+        }
+
+        const labels = sampledData.map((_, i) => {
+            const sec = Math.round(((i + 1) / pointCount) * totalSeconds);
+            return formatTime(sec);
+        });
+
+        if (window._focusChart) window._focusChart.destroy();
+        const ctx = document.getElementById('focusTimelineChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
+
+        window._focusChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: '집중도 (%)',
+                    data: timelineScore,
+                    borderColor: '#FF7710',
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointBackgroundColor: 'white',
+                    pointBorderColor: '#FF7710',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { 
+                      beginAtZero: true, 
+                      max: 100, 
+                      grid: { color: '#f0f0f0' },
+                      ticks: {
+                          callback: (value) => `${value}%`
+                      }
+                  },
+                    x: { grid: { display: false } }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    }
 
       const courses = await CourseCRUD.getCourses();
       courses.forEach(course => {
@@ -127,156 +222,42 @@
 
       async function loadDetailData(courseId, date) {
         const dateParts = date.split('-');
-        document.getElementById('pageTitle').textContent = `수업별 타임라인 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
+        const courseName = coursePicker.options[coursePicker.selectedIndex].text;
+        document.getElementById('pageTitle').textContent = `${courseName} 집중 평균 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
 
-        // 날짜 포맷 변환 (2026-03-26 → 20260326)
-        const dateKey = date.replace(/-/g, '');
-
-        const data = await CourseTLCRUD.getCourseTimeline(courseId, dateKey);
+        const data = await CourseTLCRUD.getCourseTimeline(courseId, date); 
+        console.log('[loadDetailData] getCourseTimeline 결과:', data);
 
         if (!data || data.timelineScore.length === 0) {
-            document.getElementById('avgScore').textContent = '- %';
-            document.getElementById('maxScore').textContent = '- %';
-            document.getElementById('minScore').textContent = '- %';
-            document.getElementById('noDataMsg').style.display = 'block';
-            document.getElementById('focusTimelineChart').style.display = 'none';
+            console.log('[loadDetailData] 저장된 데이터 없음 → getStudentTimelines 호출');
+            const allTimelines = await CourseTLCRUD.getStudentTimelines(courseId, date);
+            console.log('[loadDetailData] allTimelines:', allTimelines);
+
+            if (allTimelines.length === 0) {
+                document.getElementById('avgScore').textContent = '- %';
+                document.getElementById('maxScore').textContent = '- %';
+                document.getElementById('minScore').textContent = '- %';
+                document.getElementById('noDataMsg').style.display = 'block';
+                document.getElementById('focusTimelineChart').style.display = 'none';
+                return;
+            }
+
+            // 계산 후 저장
+            const avgTimeline = CourseTLCRUD.calculateAverageTimeline(allTimelines);
+            console.log('[loadDetailData] avgTimeline:', avgTimeline);
+            const saved = await CourseTLCRUD.saveCourseTimeline(courseId, date, avgTimeline);
+            console.log('[loadDetailData] saveCourseTimeline 완료:', saved);
+
+            renderChart(saved.timelineScore, saved.avgScore, saved.maxScore, saved.minScore);
+
             return;
         }
 
-        document.getElementById('noDataMsg').style.display = 'none';
-        document.getElementById('focusTimelineChart').style.display = 'block';
+        renderChart(data.timelineScore, data.avgScore, data.maxScore, data.minScore);
+  
+      }
 
-        document.getElementById('avgScore').textContent = `${data.avgScore}%`;
-        document.getElementById('maxScore').textContent = `${data.maxScore}%`;
-        document.getElementById('minScore').textContent = `${data.minScore}%`;
-
-        const labels = data.timelineScore.map((_, i) => `${(i + 1) * 10}분`);
-
-        // 차트 중복 생성 방지
-        if (window._focusChart) window._focusChart.destroy();
-
-        const ctx = document.getElementById('focusTimelineChart').getContext('2d');
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
-        gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
-
-        window._focusChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: '집중도 (%)',
-                    data: data.timelineScore,
-                    borderColor: '#FF7710',
-                    backgroundColor: gradient,
-                    borderWidth: 3,
-                    pointBackgroundColor: 'white',
-                    pointBorderColor: '#FF7710',
-                    pointBorderWidth: 2,
-                    pointRadius: 5,
-                    pointHoverRadius: 8,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
-                    x: { grid: { display: false } }
-                },
-                interaction: { intersect: false, mode: 'index' }
-            }
-        });
-    }
-  
-      // 🌟 [임시 로직] 현재 DB에는 '하루치 평균 점수 1개'만 저장되어 있습니다.
-      // 피그마처럼 출렁이는 타임라인 그래프를 그리기 위해, 평균 점수를 바탕으로 가상의 타임라인 배열을 생성합니다.
-      // (추후 student_dashboard에서 분당 점수 배열을 DB에 통째로 저장하도록 업그레이드하면 완벽해집니다!)
-      // async function loadDetailData(courseId, date) {
-      //     const dateParts = date.split('-');
-      //     document.getElementById('pageTitle').textContent = `수업별 타임라인 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
-  
-      //     if (typeof db === 'undefined') return;
-  
-      //     const docId = targetDate.replace(/-/g, ''); 
-      //     const docRef = db.collection('helmo').doc('results').collection('daily').doc(docId);
-      //     const docSnap = await docRef.get();
-  
-      //     let realAvgScore = 0;
-      //     let realTimeline = []; // 🌟 DB에서 가져올 진짜 배열
-  
-      //     if (docSnap.exists) {
-      //         document.getElementById('noDataMsg').style.display = 'none';
-      //          document.getElementById('focusTimelineChart').style.display = 'block';
-      //         const data = docSnap.data();
-      //         realAvgScore = data.result || 0;
-      //         realTimeline = data.timeline || []; // 배열 가져오기!
-      //     } else {
-      //         document.getElementById('avgScore').textContent = `- %`;
-      //         document.getElementById('maxScore').textContent = `- %`;
-      //         document.getElementById('minScore').textContent = `- %`;
-      //         document.getElementById('noDataMsg').style.display = 'block';
-      //         document.getElementById('focusTimelineChart').style.display = 'none'; // 차트 숨기기
-      //         return;
-      //     }
-  
-      //     // 만약 과거 데이터라서 타임라인 배열이 없다면 기본값 세팅
-      //     if (realTimeline.length === 0) {
-      //         realTimeline = [realAvgScore];
-      //     }
-  
-      //     // 최고/최저 점수 계산
-      //     const max = Math.max(...realTimeline);
-      //     const min = Math.min(...realTimeline);
-  
-      //     // x축 라벨 자동 생성 (진행 흐름에 따라 1, 2, 3...)
-      //     const labels = realTimeline.map((_, i) => `구간 ${i + 1}`);
-  
-      //     // 상단 카드에 꽂기
-      //     document.getElementById('avgScore').textContent = `${realAvgScore}%`;
-      //     document.getElementById('maxScore').textContent = `${max}%`;
-      //     document.getElementById('minScore').textContent = `${min}%`;
-  
-      //     // 📈 진짜 데이터로 그래프 그리기!
-      //     const ctx = document.getElementById('focusTimelineChart').getContext('2d');
-      //     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-      //     gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
-      //     gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
-  
-      //     new Chart(ctx, {
-      //         type: 'line',
-      //         data: {
-      //             labels: labels,
-      //             datasets: [{
-      //                 label: ' 집중도 (%)',
-      //                 data: realTimeline, // 🌟 가짜 데이터 대신 찐 데이터 삽입!
-      //                 borderColor: '#FF7710',
-      //                 backgroundColor: gradient,
-      //                 borderWidth: 3,
-      //                 pointBackgroundColor: 'white',
-      //                 pointBorderColor: '#FF7710',
-      //                 pointBorderWidth: 2,
-      //                 pointRadius: 5,
-      //                 pointHoverRadius: 8,
-      //                 fill: true,
-      //                 tension: 0.4 
-      //             }]
-      //         },
-      //         options: {
-      //             responsive: true,
-      //             maintainAspectRatio: false,
-      //             plugins: { legend: { display: false } },
-      //             scales: {
-      //                 y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
-      //                 x: { grid: { display: false } }
-      //             },
-      //             interaction: { intersect: false, mode: 'index' },
-      //         }
-      //     });
-      // }
+      
     });
 
   </script>

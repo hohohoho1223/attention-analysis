@@ -67,6 +67,7 @@
   <script src="/js/crud/admin_realtime.js"></script>
   <script src="/js/ai_logic.js"></script>
 
+
   <script>
     const exitBtn = document.getElementById('exitBtn');
     const webcamSection = document.getElementById('webcam-section');
@@ -95,11 +96,21 @@
     let sessionScores = [];
     let continuousFail = 0; 
 
-    let tempInterval = null; 
-    let timelineInterval = null;
+    let collectInterval = null; // 10초마다 수집
+    let timelineInterval = null; // 1분마다 DB 갱신
+    let classStartTime = null;
+    let updateTimeLine = [];
 
     let latestAttentionState = new RemoteAttentionState();
     let isRemoteAnalyzing = false;
+
+    // ✅ 변경: 경과시간 기반 → 인덱스(카운터) 기반으로 교체. toHHMMSS는 포맷터 역할만 유지
+    function toHHMMSS(seconds) {
+      const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0'); // ✅ '00' → '0' 버그 수정
+      const s = String(seconds % 60).padStart(2, '0');                       // ✅ '00' → '0' 버그 수정
+      return `${h}:${m}:${s}`;
+    }
 
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
@@ -112,6 +123,13 @@
     });
 
     faceMesh.onResults(async (results) => {
+      console.log('[onResults]', {
+        readyState: videoElement.readyState,
+        isClassStarted,
+        score: latestAttentionState?.score,
+        sessionLen: sessionScores.length
+      });
+
       canvasElement.width = videoElement.videoWidth;
       canvasElement.height = videoElement.videoHeight;
       canvasCtx.save();
@@ -235,6 +253,8 @@
         return;
       }
 
+      console.log('[AUTH]', { user: user.uid, userDoc });
+
       displayName.textContent = userDoc.name;
       webcamSection.style.display = 'block';
       currentUser = user;
@@ -307,14 +327,36 @@
       db.collection(COL_COURSES).doc(userDoc.courseId)
         .collection(COL_COURSES_TIMELINE).doc(today)
         .onSnapshot(async (doc) => {
+          console.log('[SNAPSHOT]', {
+            exists: doc.exists,
+            data: doc.exists ? doc.data() : null,
+            isClassStartedBefore: isClassStarted,
+            hasClassStarted
+          });
+
           if (doc.exists) {
             isClassStarted = doc.data().isStarted === true;
             if (isClassStarted) {
-              hasClassStarted = true; 
+              hasClassStarted = true;
+              // ✅ 변경: 수업 시작 시간 최초 1회 세팅
+              classStartTime = classStartTime ?? new Date();
               waitingOverlay.style.opacity = '0';
               setTimeout(() => {
                 waitingOverlay.style.display = 'none';
               }, 500);
+
+              // ✅ 변경: 15초 후 초기값(00:00:00) 1회 저장
+              setTimeout(async () => {
+                if (!isClassStarted || sessionScores.length === 0) return;
+                const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+                updateTimeLine.push(avg);
+                await db.collection('users').doc(currentUser.uid)
+                  .collection('daily_timeline').doc(today)
+                  .set({
+                      timelineScore: firebase.firestore.FieldValue.arrayUnion(...updateTimeLine)
+                  }, { merge: true });
+              }, 10000);
+
             } else {
               waitingOverlay.style.display = 'flex';
               setTimeout(() => {
@@ -336,22 +378,50 @@
                 hasClassStarted = false; 
                 isClassStarted = false; 
                 sessionScores = [];
+                updateTimeLine = [];
+                // ✅ 변경: classStartTime 리셋
+                classStartTime = null;
+                // ✅ 변경: 카운터 리셋 (다음 수업 세션을 위해)
+                isRemoteAnalyzing = false;
+                latestAttentionState = new RemoteAttentionState();
+                continuousFail = 0;
               }
             }
           }
+        
+          console.log('[SNAPSHOT] after set', {
+            isClassStarted,
+            hasClassStarted
+          });
         });
 
       console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
 
-      tempInterval = setInterval(async () => {
-        if (!isClassStarted || sessionScores.length === 0) return;
-        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-        const isSuccess = await DailyTLCRUD.addTempScore(currentUser.uid, today, avg);
+      // 10초마다 수집
+      collectInterval = setInterval(() => {
+          if (!isClassStarted || sessionScores.length === 0) return;
+          const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+          updateTimeLine.push(avg);
+          console.log('[COLLECT] 10초 수집 →', avg, '| 버퍼:', updateTimeLine.length);
+      }, 10000);
 
-        if (isSuccess) {
-          continuousFail = 0;
-        } else {
+      // 1분씩 db 업로드
+      timelineInterval = setInterval(async () => {
+        if (!isClassStarted || updateTimeLine.length === 0) return;
+
+        try {
+          await db.collection('users').doc(currentUser.uid)
+            .collection('daily_timeline').doc(today)
+            .set({
+                timelineScore: firebase.firestore.FieldValue.arrayUnion(...updateTimeLine)
+            }, { merge: true });
+
+            console.log('[UPLOAD] 1분 업로드 완료', updateTimeLine);
+            updateTimeLine = [];  // ✅ 버퍼 비우기
+            continuousFail = 0;
+        } catch (e) {
           continuousFail += 1;
+          console.error('[TIMELINE] 저장 실패', e);
           if (continuousFail >= 3) {
             alert('네트워크 연결이 불안정합니다. 인터넷 연결을 확인해주세요.');
             if (realtimeStatus) {
@@ -359,10 +429,9 @@
               realtimeStatus.currentScore = null;
               await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
             }
-            clearInterval(tempInterval);
+            clearInterval(collectInterval);
             clearInterval(timelineInterval);
             clearInterval(aiInterval);
-
             waitingOverlay.style.display = 'flex';
             waitingOverlay.style.opacity = '1';
             waitingOverlay.textContent = '네트워크 오류로 분석이 중단되었습니다. 새로고침이 필요합니다. 🔌';
@@ -370,25 +439,39 @@
         }
       }, 60000);
 
-      timelineInterval = setInterval(async () => {
-        if (!isClassStarted) return;
-        const today = new Date().toISOString().split('T')[0];
-        await DailyTLCRUD.updateToTimeline(user.uid, today);
-      }, 600000);
     });
 
     async function finalizeSession({ userId, courseId, today, userDoc, realtimeStatus, sessionScores }) {
-      if (sessionScores.length > 0) {
+      console.log('[FINALIZE ENTER]', {
+        userId,
+        courseId,
+        today,
+        sessionScoresLen: sessionScores.length
+      });
+
+      // ✅ 변경: 마지막 1분 미만 구간 flush
+      if (sessionScores.length > 0 && classStartTime) {
         const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
-        await DailyTLCRUD.addTempScore(userId, today, avg);
+        updateTimeLine.push(avg);
+        await db.collection('users').doc(userId)
+          .collection('daily_timeline').doc(today)
+          .set({
+              timelineScore: firebase.firestore.FieldValue.arrayUnion(...updateTimeLine)
+          }, { merge: true });// ✅ 변경: scores → timelineScore
+        console.log('[FINALIZE] 마지막 flush →', avg);
       }
-      await DailyTLCRUD.updateTimelineScore(userId, today);
+
+      // ✅ 변경: DailyTLCRUD 호출 제거, daily_report 저장만 유지
       const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
       await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
 
-      if (aiInterval) clearInterval(aiInterval); 
-      if (tempInterval) clearInterval(tempInterval); 
-      if (timelineInterval) clearInterval(timelineInterval); 
+      await db.collection(COL_COURSES).doc(courseId)
+        .collection(COL_COURSES_TIMELINE).doc(today)
+        .set({ completeStudents: firebase.firestore.FieldValue.arrayUnion(userId) }, { merge: true });
+
+      // ✅ aiInterval은 살려둠 (두 번째 수업에서도 계속 동작해야 함)
+      if (collectInterval) { clearInterval(collectInterval); collectInterval = null; }
+      if (timelineInterval) { clearInterval(timelineInterval); timelineInterval = null; }
     }
 
     // 브라우저 창을 닫으면 realtime 삭제

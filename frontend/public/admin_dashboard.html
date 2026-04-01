@@ -71,7 +71,7 @@
       <div class="top-controls">
         <select class="course-select" id="courseSelect"></select>
         <div style="display: flex;">
-          <button class="report-btn" onclick="alert('리포트 자동생성 기능은 준비 중입니다!')">리포트 자동 생성</button>
+          <button class="report-btn" id="reportBtn">리포트 자동 생성</button>
           <button class="class-toggle-btn" id="classToggleBtn">수업 시작</button>
         </div>
       </div>
@@ -114,7 +114,9 @@
       const today = new Date().toISOString().split('T')[0];
       const tbody = document.getElementById('student-table-body');
       const classToggleBtn = document.getElementById('classToggleBtn');
+      const reportBtn = document.getElementById('reportBtn');
       let isClassStarted = false;
+      let hasClassStartedAdmin = false;
       const courseId = userDoc.courseId;
 
       const courseSelect = document.getElementById('courseSelect');
@@ -207,6 +209,7 @@
       });
 
       let unsubscribeBoard = null;
+
       function subscribeBoard(targetCourseId) {
         if (unsubscribeBoard) unsubscribeBoard();
 
@@ -222,12 +225,26 @@
           .onSnapshot((doc) => {
             if (doc.exists) {
               isClassStarted = doc.data().isStarted === true;
+
+
               if (isClassStarted) {
                 classToggleBtn.textContent = '기록 종료';
                 classToggleBtn.classList.add('started');
+                hasClassStartedAdmin = true;
+
+                // ✅ 임시 리포트 버튼 : 기록 중엔 비활성화 
+                reportBtn.disabled = true;
+                reportBtn.style.cursor = 'not-allowed';
+
               } else {
                 classToggleBtn.textContent = '기록 시작';
                 classToggleBtn.classList.remove('started');
+
+                  // ✅ 임시 리포트 버튼 : 한 번이라도 시작됐으면 활성화
+                if (hasClassStartedAdmin) {
+                  reportBtn.disabled = false;
+                  reportBtn.style.cursor = 'pointer';
+                }
               }
             } else {
               isClassStarted = false;
@@ -240,21 +257,48 @@
       // 초기 세팅
       subscribeBoard(courseSelect.value);
 
-      classToggleBtn.addEventListener('click', () => {
+      classToggleBtn.addEventListener('click', async () => {
           const today = new Date().toISOString().split('T')[0];
           const newState = !isClassStarted;
           const selectedCourseId = courseSelect.value;
+
+          // const isCalc =  <- isCalculated만 조회
           
           if (selectedCourseId === '전체 보기') return; // 예방
 
-          db.collection(COL_COURSES).doc(selectedCourseId)
+          await db.collection(COL_COURSES).doc(selectedCourseId)
             .collection(COL_COURSES_TIMELINE).doc(today)
-            .set({ isStarted: newState }, { merge: true })
-            .then(() => console.log('[ADMIN] timeline set success'))
-            .catch(err => console.error('[ADMIN] timeline set fail:', err));
-      });
+            .set({ isStarted: newState }, { merge: true });
+          console.log('[ADMIN] 기록 ' + (newState ? '시작' : '종료'), { selectedCourseId, today });
+            
+          // if (!newState) { // 종료 시
+          //   // isStarted: false 와 flushStatus: 'waiting' 동시에 세팅
+          //   const realtimeSnap = await db.collection(COL_COURSES)
+          //     .doc(selectedCourseId).collection('realtime').get();
+              
+          //     await db.collection(COL_COURSES).doc(selectedCourseId)
+          //     .collection(COL_COURSES_TIMELINE).doc(today)
+          //     .set({ isStarted: false }, { merge: true });
+              
+          //     console.log('[ADMIN] 종료 클릭', { selectedCourseId, today, isClassStarted });
+            
+          // } else { // 시작 시
+          //   db.collection(COL_COURSES).doc(selectedCourseId)
+          //   .collection(COL_COURSES_TIMELINE).doc(today)
+          //   .set({ isStarted: true }, { merge: true });
+          // }
+      
+          });
+      
+            // ✅ 임시 리포트 버튼 : 이벤트
+            reportBtn.addEventListener('click', async () => {
+              const today = new Date().toISOString().split('T')[0];
+              const selectedCourseId = courseSelect.value;
+      
+              window.location.href = `/course_timeline.html?date=${today}`;
+            });
+        });
 
-    });
   </script>
 </body>
 </html>

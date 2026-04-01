@@ -186,7 +186,7 @@
             `;
             calendarBody.appendChild(dayEl);
         }
-
+        updateSummariesAvg(dailyDataList);
         console.log('[renderCalendarAvg] 렌더링 완료');
     }
 
@@ -264,7 +264,7 @@
       updateSummaries(uid, year, month);
     }
 
-    // 🌟 3. 주간/월간 요약 업데이트 마법
+    // 🌟 3. 주간/월간 요약 업데이트 마법 - 학생별 평균
     async function updateSummaries(uid, year, month) {
         console.log('[updateSummaries] 진입', { uid, year, month });
         const monthlyData = await StudentReportCRUD.getMonthDailyReports(uid, year, month + 1);
@@ -309,6 +309,30 @@
             document.getElementById('weeklyScore').textContent = `- %`;
             document.getElementById('weeklyGrade').textContent = `-`;
         }
+    }
+
+    // 과정별 평균
+    function updateSummariesAvg(dailyDataList) {
+        // 월간
+        const monthlyResult = StudentReportCRUD.calculateGroupAvg(Object.values(dailyDataList));
+        document.getElementById('monthlyScore').textContent = monthlyResult.count > 0 ? `${monthlyResult.score}%` : `- %`;
+        document.getElementById('monthlyGrade').textContent = monthlyResult.count > 0 ? monthlyResult.grade : `-`;
+
+        // 주간 - 이번 주에 해당하는 day만 필터
+        const today = new Date(currentDate);
+        const weekStart = new Date(new Date(today).setDate(today.getDate() - today.getDay()));
+        const weekEnd   = new Date(new Date(today).setDate(today.getDate() - today.getDay() + 6));
+
+        const weekScores = Object.entries(dailyDataList)
+            .filter(([day]) => {
+                const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), parseInt(day));
+                return d >= weekStart && d <= weekEnd;
+            })
+            .map(([, score]) => score);
+
+        const weeklyResult = StudentReportCRUD.calculateGroupAvg(weekScores);
+        document.getElementById('weeklyScore').textContent = weeklyResult.count > 0 ? `${weeklyResult.score}%` : `- %`;
+        document.getElementById('weeklyGrade').textContent = weeklyResult.count > 0 ? weeklyResult.grade : `-`;
     }
 
     // ✅ 이전/다음 달 버튼: 모드에 따라 분기
