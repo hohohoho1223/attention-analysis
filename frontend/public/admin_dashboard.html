@@ -188,7 +188,7 @@
                   <td>${student.course}</td>
                   <td><span class="${statusClass}">${student.status}</span></td>
                   <td style="font-weight: bold;">${student.currentScore ?? ''}</td>
-                  <td style="color: #dc3545; font-weight: bold;">0회</td> <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
+                  <td style="color: #dc3545; font-weight: bold;">${student.absentCount ?? 0}회</td> <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
               `;
               tbody.appendChild(tr);
           });

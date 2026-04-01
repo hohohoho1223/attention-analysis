@@ -135,52 +135,36 @@
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-      let faceDetected = false;
-
+      // 얼굴 랜드마크가 있을 경우만 시각화
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-        faceDetected = true;
         const landmarks = results.multiFaceLandmarks[0];
         drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {
           color: '#C0C0C070',
           lineWidth: 1,
         });
+      }
 
-        if (!isRemoteAnalyzing && isClassStarted && videoElement.readyState >= 2) {
-          isRemoteAnalyzing = true;
-          remoteAttentionEngine.analyzeFrame(videoElement, 2.0)
-            .then((state) => {
-              latestAttentionState = state;
-              // FIXATED 여부 
-              const isFixated = state.is_fixated;
-              
-              // main.py의 get_face_direction() 결과를 기반으로 얼굴 방향 판단
-              console.log('[RemoteAttentionEngine] state', {
-                ...state,
-                isFixated,
-                faceDirection: state.face_direction,
-              });
-            })
-            .catch((err) => {
-              console.error('[RemoteAttentionEngine] analyzeFrame failed', err);
-            })
-            .finally(() => {
-              isRemoteAnalyzing = false;
+      // 🔥 핵심 수정: 얼굴 여부와 관계없이 항상 서버 분석 수행
+      if (!isRemoteAnalyzing && isClassStarted && videoElement.readyState >= 2) {
+        isRemoteAnalyzing = true;
+        remoteAttentionEngine.analyzeFrame(videoElement, 2.0)
+          .then((state) => {
+            latestAttentionState = state;
+
+            console.log('[RemoteAttentionEngine] state', {
+              state: state.state,
+              score: state.score,
+              absent_count: state.absent_count,
+              no_face: state.durations?.no_face,
+              face_detected: state.face_detected
             });
-        }
-      } else {
-        latestAttentionState = new RemoteAttentionState({
-          state: 'LOST_FOCUS',
-          score: 0,
-          face_detected: false,
-          gaze_direction: 'Unknown',
-          blink_bpm: 0,
-          eye_focus_score: 0,
-          eye_status_msg: 'Face Not Detected (Remote)',
-          pose: { yaw: 0, pitch: 0, roll: 0 },
-          body: { visible: false, shoulder_tilt: 0 },
-          durations: { head: 0, body: 0, fixation_break: 0, no_face: 0 },
-          cnn: { is_drowsy: false, left_eye: 0, right_eye: 0, mouth: 0, smooth: 0 },
-        });
+          })
+          .catch((err) => {
+            console.error('[RemoteAttentionEngine] analyzeFrame failed', err);
+          })
+          .finally(() => {
+            isRemoteAnalyzing = false;
+          });
       }
 
       const attentionState = latestAttentionState;
@@ -222,13 +206,15 @@
         else if (attentionState.state === 'LOST_FOCUS') statusKOR = '이탈';
         else if (attentionState.state === 'ABSENT') statusKOR = '자리비움';
         else if (attentionState.state === 'DROWSY') statusKOR = '🚨 졸음 🚨';
-
+        
+        // 현재 점수는 세션 평균으로 표시 (실시간 점수는 너무 변동이 심해서 오히려 혼란을 줄 수 있음)
         const displayScore = sessionScores.length > 0
           ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length)
           : 0;
 
         realtimeStatus.status = statusKOR;
         realtimeStatus.currentScore = displayScore;
+        realtimeStatus.absentCount = attentionState.absent_count ?? 0;
         await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
       }
 

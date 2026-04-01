@@ -12,6 +12,7 @@ class RemoteAttentionState {
         this.blink_bpm = payload.blink_bpm ?? 0;
         this.eye_focus_score = payload.eye_focus_score ?? 100.0;
         this.eye_status_msg = payload.eye_status_msg ?? "Eye analysis disabled";
+        this.absent_count = payload.absent_count ?? 0;
 
         this.pose = payload.pose ?? { yaw: 0.0, pitch: 0.0, roll: 0.0 };
         this.body = payload.body ?? { visible: false, shoulder_tilt: 0.0 };
