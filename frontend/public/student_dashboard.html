@@ -172,7 +172,14 @@
         if (attentionState.state === 'CALIBRATING') {
           waitingOverlay.style.display = 'flex';
           waitingOverlay.style.opacity = '1';
-          waitingOverlay.textContent = '눈 인식중입니다. 정면을 바라봐주세요.';
+
+          const calibMsg = attentionState.eye_status_msg || '';
+          
+          if (calibMsg.includes('Calibrating')) {
+            waitingOverlay.textContent = `눈 인식중입니다. 정면을 바라봐주세요. (${calibMsg})`;
+          } else {
+            waitingOverlay.textContent = '눈 인식중입니다. 정면을 바라봐주세요.';
+          }
         } else {
           waitingOverlay.style.opacity = '0';
           setTimeout(() => {
