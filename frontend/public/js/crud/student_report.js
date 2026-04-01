@@ -102,8 +102,8 @@ var StudentReportCRUD = {
         }
     },
     
-    // weekly, monthly 평균 계산
-    calculateRangeAverage: async function(uid, rangeDates) {
+    // weekly, monthly 평균 계산 (1명당 평균)
+    calculateStudentAvg: async function(uid, rangeDates) {
         // 병렬 호출(Promise.all 활용)
         const results = await Promise.all(
             rangeDates.map(date => this.getDailyData(uid, date))
@@ -118,6 +118,18 @@ var StudentReportCRUD = {
             score: avg,
             grade: this.calculateGrade(avg),
             count: validScores.length // 몇 일치 데이터인지 확인용
+        };
+    },
+
+    calculateGroupAvg : function(scores) {
+        const valid = scores.filter(s => s !== null && s !== undefined);
+
+        if (valid.length === 0) return { score: 0, grade: 'N/A', count: 0 };
+        const avg = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+        return { 
+            score: avg, 
+            grade: this.calculateGrade(avg), 
+            count: valid.length 
         };
     }
 }
