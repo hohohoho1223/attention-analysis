@@ -6,6 +6,7 @@ class RemoteAttentionState {
     constructor(payload = {}) {
         this.state = payload.state ?? "FOCUSED";
         this.score = payload.score ?? 100.0;
+        this.is_fixated = payload.is_fixated ?? false;
         this.face_detected = payload.face_detected ?? false;
         this.gaze_direction = payload.gaze_direction ?? "Unknown";
         this.blink_bpm = payload.blink_bpm ?? 0;
@@ -50,7 +51,7 @@ class RemoteAttentionEngine {
         this.lastState = new RemoteAttentionState();
     }
 
-    async analyzeFrame(videoOrCanvasEl, fps = 30.0) {
+    async analyzeFrame(videoOrCanvasEl, fps = 2.0) {
         const frame = this._encodeFrame(videoOrCanvasEl);
         const payload = {
             frame,
@@ -73,7 +74,8 @@ class RemoteAttentionEngine {
             const text = await response.text();
             throw new Error(`AI analyze failed: ${response.status} ${text}`);
         }
-
+        
+        // main.py return 값을 받는 구간 { state, score, face_detected, gaze_direction, blink_bpm, eye_focus_score, eye_status_msg, pose, body, durations, cnn } 형태의 JSON이므로 그대로 RemoteAttentionState로 매핑 
         const data = await response.json();
         this.lastState = new RemoteAttentionState(data);
         return this.lastState;

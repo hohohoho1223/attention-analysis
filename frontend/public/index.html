@@ -94,7 +94,7 @@
 
           if (!userDoc) {
             const courseSelect = document.getElementById('courseName');
-            const courses = await CourseCRUD.getCourses();
+            let courses = await CourseCRUD.getCourses();
 
             if (!courses || courses.length === 0) {
               console.log("course 없음 → 미정 생성");
@@ -105,6 +105,9 @@
               } else {
                 courses = courses.filter(course => course.courseName !== "미정");
               }
+            
+            // 과정 선택 드롭다운을 초기화해서, 기존 옵션을 지운 뒤 최신 과정 목록만 다시 넣기 위한 코드입니다.
+            courseSelect.innerHTML = '';
 
             courses.forEach(course => {
               const option = document.createElement('option');

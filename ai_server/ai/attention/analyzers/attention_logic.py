@@ -240,6 +240,7 @@ class AttentionAnalyzer:
             self.state.score = max(0.0, self.state.score - 8.0 * dt) # 초당 8점 삭감
             self.state.eye_status_msg = "DROWSY DETECTED: Penalty!"
             self.state.no_face_duration = 0.0 # 얼굴은 있으니까 이탈 타이머 리셋
+            self.state.is_fixated = self._is_screen_fixated()
             return self.state
 
         if face_detected:
@@ -256,4 +257,5 @@ class AttentionAnalyzer:
 
         self._update_state_label()
         self.state.score = self._calculate_score()
+        self.state.is_fixated = self._is_screen_fixated()
         return self.state
