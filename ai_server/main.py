@@ -353,6 +353,7 @@ class FrameAnalyzerSession:
             'body': {
                 'visible': bool(self.upper_body_state.body_visible),
                 'shoulder_tilt': float(self.upper_body_state.shoulder_tilt),
+                'smoothed_shoulder_tilt': float(attention_state.smoothed_body_tilt),
             },
             'durations': {
                 'head': float(attention_state.head_duration),
