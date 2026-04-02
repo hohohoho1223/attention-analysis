@@ -113,7 +113,7 @@
     <div class="sidebar" id="sidebar">
       <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
       <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
-      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
+      <a href="/course_timeline.html" class="menu-item active">수업별 타임라인</a>
       <a href="/course_manage.html" class="menu-item">과정 관리</a>
     </div>
 
@@ -195,6 +195,7 @@
       if (userDoc.role === 'admin') document.getElementById('adminBadge').style.display = 'inline-block';
       document.body.style.display = 'block';
 
+      // 1. URL에서 날짜 정보 뽑아오기 (예: ?date=2026-03-26)
       const urlParams = new URLSearchParams(window.location.search);
       const today = new Date().toISOString().split('T')[0];
       const targetDate = urlParams.get('date') || today;
@@ -212,14 +213,16 @@
           return 'D';
       }
 
+      // 2. 그래프 그리는 함수 정의
       function renderChart(timelineScore, avgScore) {
         document.getElementById('noDataMsg').style.display = 'none';
         document.getElementById('focusTimelineChart').style.display = 'block';
-        
+
         // 상단 카드 업데이트
         document.getElementById('avgScore').textContent = `${avgScore}%`;
         document.getElementById('avgGrade').textContent = calculateGrade(avgScore);
 
+        // ✅ 20개로 샘플링
         const MAX_POINTS = 20;
         let sampledData = [];
 
@@ -236,7 +239,8 @@
             }
         }
 
-        const totalSeconds = timelineScore.length * 10; 
+        // ✅ 라벨 생성 (index 1개 = 10초 기준)
+        const totalSeconds = timelineScore.length * 10; // 원본 길이 기준 총 시간
         const pointCount = sampledData.length;
 
         function formatTime(seconds) {
@@ -286,7 +290,12 @@
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: (value) => `${value}%` } },
+                    y: { 
+                      beginAtZero: true, 
+                      max: 100, 
+                      grid: { color: '#f0f0f0' },
+                      ticks: { callback: (value) => `${value}%` }
+                    },
                     x: { grid: { display: false } }
                 },
                 interaction: { intersect: false, mode: 'index' }
@@ -302,8 +311,13 @@
         coursePicker.appendChild(option);
       });
   
-      coursePicker.addEventListener('change', () => loadDetailData(coursePicker.value, datePicker.value));
-      datePicker.addEventListener('change', () => loadDetailData(coursePicker.value, datePicker.value));
+      coursePicker.addEventListener('change', () => {
+          loadDetailData(coursePicker.value, datePicker.value);
+      });
+  
+      datePicker.addEventListener('change', () => {
+          loadDetailData(coursePicker.value, datePicker.value);
+      });
   
       loadDetailData(coursePicker.value, datePicker.value);
 
@@ -312,20 +326,34 @@
         const courseName = coursePicker.options[coursePicker.selectedIndex].text;
         document.getElementById('pageTitle').textContent = `[${courseName}] 전체 리포트 (${dateParts[0]}/${dateParts[1]}/${dateParts[2]})`;
 
-        // 1. 차트 데이터 로드
         const data = await CourseTLCRUD.getCourseTimeline(courseId, date); 
-        
-        if (!data || data.timelineScore.length === 0) {
-            document.getElementById('avgScore').textContent = '- %';
-            document.getElementById('avgGrade').textContent = '-';
-            document.getElementById('totalAbsences').textContent = '- 회';
-            document.getElementById('noDataMsg').style.display = 'block';
-            document.getElementById('focusTimelineChart').style.display = 'none';
-            document.getElementById('student-list-body').innerHTML = '<tr><td colspan="5" style="color:#aaa;">데이터가 없습니다.</td></tr>';
-            return;
-        }
+        console.log('[loadDetailData] getCourseTimeline 결과:', data);
 
-        renderChart(data.timelineScore, data.avgScore);
+        if (!data || data.timelineScore.length === 0) {
+            console.log('[loadDetailData] 저장된 데이터 없음 → getStudentTimelines 호출');
+            const allTimelines = await CourseTLCRUD.getStudentTimelines(courseId, date);
+            console.log('[loadDetailData] allTimelines:', allTimelines);
+
+            if (allTimelines.length === 0) {
+                document.getElementById('avgScore').textContent = '- %';
+                document.getElementById('avgGrade').textContent = '-';
+                document.getElementById('totalAbsences').textContent = '- 회';
+                document.getElementById('noDataMsg').style.display = 'block';
+                document.getElementById('focusTimelineChart').style.display = 'none';
+                document.getElementById('student-list-body').innerHTML = '<tr><td colspan="5" style="color:#aaa;">데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            // 계산 후 저장
+            const avgTimeline = CourseTLCRUD.calculateAverageTimeline(allTimelines);
+            console.log('[loadDetailData] avgTimeline:', avgTimeline);
+            const saved = await CourseTLCRUD.saveCourseTimeline(courseId, date, avgTimeline);
+            console.log('[loadDetailData] saveCourseTimeline 완료:', saved);
+
+            renderChart(saved.timelineScore, saved.avgScore);
+        } else {
+            renderChart(data.timelineScore, data.avgScore);
+        }
 
         // 2. 학생별 상세 데이터 로드 및 테이블/통계 구축
         const students = await CourseCRUD.getStudentsByCourse(courseId);
