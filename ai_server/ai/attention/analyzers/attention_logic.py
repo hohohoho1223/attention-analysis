@@ -189,9 +189,16 @@ class AttentionAnalyzer:
             self.state.state = "ABSENT"
             return
 
-        # 얼굴이 아직 돌아오지 않았지만 ABSENT 임계치 전이라면 우선 LOST_FOCUS로 본다.
+        # 얼굴 미검출 → duration 기반 단계 처리
         if not self.state.face_detected:
-            self.state.state = "LOST_FOCUS"
+            if self.state.no_face_duration >= self.config.no_face_time:
+                if self.state.state != "ABSENT":
+                    self.state.absent_count += 1
+                self.state.state = "ABSENT"
+            elif self.state.no_face_duration >= 3.0:
+                self.state.state = "LOST_FOCUS"
+            else:
+                self.state.state = "PARTIAL_FOCUS"
             return
         
         # --- DROWSY 판단 (모델 결과 기반 단순화) ---
