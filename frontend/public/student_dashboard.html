@@ -187,8 +187,8 @@
         if (attentionState.state === 'CALIBRATING') statusKOR = '눈 인식 중...';
         else if (attentionState.state === 'FOCUSED') statusKOR = '집중';
         else if (attentionState.state === 'PARTIAL_FOCUS') statusKOR = '집중 저하';
-        else if (attentionState.state === 'LOST_FOCUS') statusKOR = '이탈';
-        else if (attentionState.state === 'ABSENT') statusKOR = '자리비움';
+        else if (attentionState.state === 'LOST_FOCUS') statusKOR = '🚨 이탈 🚨';
+        else if (attentionState.state === 'ABSENT') statusKOR = '🚨 자리비움 🚨';
         else if (attentionState.state === 'DROWSY') statusKOR = '🚨 졸음 🚨';
 
         const displayScore = sessionScores.length > 0
@@ -211,7 +211,7 @@
           lastSentStatus.absentCount !== nextPayload.absentCount;
 
         // 위험 상태는 즉시 반영
-        const isCritical = ['🚨 졸음 🚨', '이탈', '자리비움'].includes(nextPayload.status);
+        const isCritical = ['🚨 졸음 🚨', '🚨 이탈 🚨', '🚨 자리비움 🚨'].includes(nextPayload.status);
 
         // write 조건
         const shouldWrite =

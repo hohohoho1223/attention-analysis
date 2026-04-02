@@ -191,10 +191,15 @@ class EyeFocusAnalyzer:
             eye_status_msg = "Anxious/Distracted (High BPM)"
             eye_focus_score = 60.0
         # 멍때림 감지: 10초 이상 고정된 시선과 낮은 깜빡임 BPM이 지속될 때
-        elif elapsed_time > 10 and blink_bpm < 3 and gaze_variance < 0.0005:
+        elif (
+            blink_bpm < 2
+            and gaze_variance < 0.0003
+            and gaze_direction == "Center"
+            and smooth_ear < self.base_ear * 0.9
+        ):
             eye_status_msg = "Spacing Out (Low BPM & Fixed Gaze)"
             eye_focus_score = 50.0
-
+            
         result = EyeFocusResult(
             gaze_direction=gaze_direction,
             blink_bpm=blink_bpm,

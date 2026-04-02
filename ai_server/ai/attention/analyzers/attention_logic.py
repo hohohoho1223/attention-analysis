@@ -163,6 +163,9 @@ class AttentionAnalyzer:
         elif self.state.state == "LOST_FOCUS":
             # 화면 응시가 깨진 상태. 지속될수록 55 → 30 정도까지 하락
             score = 55.0 - min(lost_driver, 5.0) * 5.0
+        elif self.state.state == "DROWSY":
+            # 점수 급락 방지 (완화된 감소)
+            score = max(30.0, 60.0 - self.drowsy_duration * 10.0)
         elif self.state.state == "PARTIAL_FOCUS":
             # 화면은 보고 있지만 자세/눈 상태가 불안정한 상태
             score = 80.0 - min(partial_driver, 4.0) * 3.0
@@ -170,13 +173,10 @@ class AttentionAnalyzer:
             # eye 상태가 조금 나쁘면 같은 PARTIAL_FOCUS 안에서 약하게 추가 보정
             if self.state.face_detected and self.state.eye_status_msg != "Eye analysis disabled":
                 safe_eye_score = max(0.0, min(100.0, self.state.eye_focus_score))
-                score -= (100.0 - safe_eye_score) * 0.08
+                score -= (100.0 - safe_eye_score) * 0.05  # 완화된 패널티
         else:
-            # FOCUSED는 높은 점수를 유지하되, eye 상태가 조금 나쁘면 약하게만 반영
+            # FOCUSED는 점수 고정 (누적 감점 방지)
             score = 100.0
-            if self.state.face_detected and self.state.eye_status_msg != "Eye analysis disabled":
-                safe_eye_score = max(0.0, min(100.0, self.state.eye_focus_score))
-                score -= (100.0 - safe_eye_score) * 0.03
 
         return max(0.0, min(100.0, score))
 
@@ -189,11 +189,24 @@ class AttentionAnalyzer:
             self.state.state = "ABSENT"
             return
 
-        # 얼굴이 아직 돌아오지 않았지만 ABSENT 임계치 전이라면 우선 LOST_FOCUS로 본다.
+        # 얼굴 미검출 → duration 기반 단계 처리
         if not self.state.face_detected:
-            self.state.state = "LOST_FOCUS"
+            if self.state.no_face_duration >= self.config.no_face_time:
+                if self.state.state != "ABSENT":
+                    self.state.absent_count += 1
+                self.state.state = "ABSENT"
+            elif self.state.no_face_duration >= 3.0:
+                self.state.state = "LOST_FOCUS"
+            else:
+                self.state.state = "PARTIAL_FOCUS"
             return
-
+        
+        # --- DROWSY 판단 (모델 결과 기반 단순화) ---
+        # 졸음 상태 감지 시 drowsy_duration이 증가하고, 일정 시간 이상 지속되면 DROWSY 상태로 진입
+        if self.drowsy_duration > 3.0:
+            self.state.state = "DROWSY"
+            return
+        
         screen_fixated = self._is_screen_fixated()
         body_unstable = abs(self.state.smoothed_body_tilt) > 20.0
         eye_degraded = self.state.eye_focus_score < 70.0
@@ -245,13 +258,14 @@ class AttentionAnalyzer:
             self.state.is_fixated = False
             return self.state
 
+        # --- DROWSY evidence 누적 ---
+        if not hasattr(self, "drowsy_duration"):
+            self.drowsy_duration = 0.0
+
         if is_drowsy:
-            self.state.state = "DROWSY"
-            self.state.score = max(0.0, self.state.score - 8.0 * dt) # 초당 8점 삭감
-            self.state.eye_status_msg = "DROWSY DETECTED: Penalty!"
-            self.state.no_face_duration = 0.0 # 얼굴은 있으니까 이탈 타이머 리셋
-            self.state.is_fixated = self._is_screen_fixated()
-            return self.state
+            self.drowsy_duration += dt * 1.0  # drowsy 상태가 감지되면 지속 시간 증가
+        else:
+            self.drowsy_duration = max(0.0, self.drowsy_duration - dt * 1.5)
 
         if face_detected:
             self.state.no_face_duration = 0.0

@@ -53,10 +53,19 @@
     
     .status-badge { padding: 5px 10px; border-radius: 12px; font-size: 13px; font-weight: bold; }
     .status-focus { background-color: #d4edda; color: #155724; }
-    .status-drowsy { background-color: #f8d7da; color: #721c24; animation: blink 1s infinite; }
+    .status-drowsy {
+      background-color: #f8d7da;
+      color: #721c24;
+      animation: blink 1s infinite;
+      display: inline-block;
+    }
     .row-drowsy { background-color: #fff3f3 !important; }
     
-    @keyframes blink { 50% { opacity: 0.5; } }
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
   </style>
 </head>
 <body style="display:none;">
@@ -177,9 +186,16 @@
               const tr = document.createElement('tr');
               let statusClass = 'status-badge';
               if (student.status === '집중') statusClass += ' status-focus';
-              if (student.status && student.status.includes('졸음')) {
-                  statusClass += ' status-drowsy';
-                  tr.classList.add('row-drowsy');
+              if (student.status) {
+                  const isCritical =
+                      student.status.includes('졸음') ||
+                      student.status.includes('이탈') ||
+                      student.status.includes('자리비움');
+
+                  if (isCritical) {
+                      statusClass += ' status-drowsy';
+                      tr.classList.add('row-drowsy');
+                  }
               }
   
               tr.innerHTML = `
