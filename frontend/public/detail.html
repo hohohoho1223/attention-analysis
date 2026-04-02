@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>상세 분석 결과 - 멋쟁이사자처럼</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* 전체 드래그 방지 */
+    body { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
+    input, textarea { user-select: text; }
+    
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; min-height: 100vh; }
+    header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+    .logo-area { display: flex; align-items: center; gap: 15px; }
+    .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
+    .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .welcome-text { font-size: 13px; color: #888; }
+    .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px; }
+    #sidebarToggleBtn { background: none; border: none; font-size: 20px; cursor: pointer; color: #555; }
+    
+    .layout { display: flex; height: calc(100vh - 65px); }
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap; }
+    .sidebar.collapsed { width: 10px; padding: 0; }
+    .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
+    .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
+    
+    .main-content { flex-grow: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; box-sizing: border-box; }
+    .container { width: 100%; max-width: 900px; }
+    
+    /* 상단 컨트롤 */
+    .top-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; border-bottom: 2px solid #333; padding-bottom: 15px;}
+    .page-title { font-size: 24px; font-weight: bold; color: #333; }
+    .btn-group { display: flex; gap: 10px; }
+    .action-btn { padding: 8px 15px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; transition: 0.2s; border: none; }
+    .btn-back { background-color: #e9ecef; color: #495057; }
+    .btn-back:hover { background-color: #dde2e6; }
+    .btn-print { background-color: #333; color: white; }
+    .btn-print:hover { background-color: #555; }
+
+    /* 🪪 정보 카드 영역 (레퍼런스 스타일 적용) */
+    .info-card { background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; }
+    .info-section-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #333; display: flex; align-items: center; gap: 8px; }
+    
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .info-row { display: flex; align-items: center; background-color: #f8f9fa; border-radius: 8px; overflow: hidden; border: 1px solid #eee; }
+    .info-label { width: 120px; background-color: #f1f3f5; padding: 12px 15px; font-weight: bold; color: #555; font-size: 14px; text-align: center; flex-shrink: 0; }
+    .info-value { padding: 12px 20px; font-size: 15px; color: #333; font-weight: 600; flex-grow: 1; }
+    
+    .highlight-value { color: #FF7710; font-size: 18px; }
+    .bad-value { color: #dc3545; }
+
+    /* 📈 차트 영역 */
+    .chart-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-bottom: 30px; }
+    .chart-wrapper { position: relative; height: 350px; width: 100%; }
+
+    /* 🤖 AI 코멘트 영역 */
+    .ai-comment-card { background: #fffaf0; border: 1px solid #ffe8cc; border-radius: 12px; padding: 25px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
+    .ai-title { color: #e66a00; font-weight: bold; font-size: 16px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+    .ai-text { font-size: 15px; line-height: 1.6; color: #444; }
+
+    /* 🖨️ 인쇄용 CSS */
+    @page {
+      margin: 0; /* 💡 브라우저가 강제로 넣는 머리글/바닥글(URL 등) 완벽 제거! */
+    }
+
+    @media print {
+      body { 
+        background-color: white; 
+        margin: 1.5cm; /* 💡 margin:0 때문에 내용이 잘리지 않도록 본문에 여백 추가 */
+      }
+      header, .sidebar, .btn-group, .filter-group { display: none !important; }
+      .layout { height: auto; display: block; }
+      .main-content { padding: 0; display: block; }
+      .container { max-width: 100%; box-shadow: none; }
+      
+      /* 그림자 없애고 테두리만 깔끔하게 (detail.html, course_timeline.html 공용) */
+      .stat-card, .chart-card, .table-card, .info-card, .ai-comment-card { 
+        box-shadow: none; 
+        border: 1px solid #ddd; 
+        break-inside: avoid; /* 인쇄 시 카드가 페이지 중간에 반토막 나는 것 방지 */
+      }
+      .top-controls { border-bottom: 2px solid #000; }
+    }
+  </style>
+</head>
+<body style="display:none;">
+
+  <header>
+    <div class="logo-area">
+      <button id="sidebarToggleBtn">☰</button>
+      <div class="logo-text">멋쟁이사자처럼</div>
+      <div class="admin-badge" id="adminBadge" style="display:none;">Admin</div>
+    </div>
+    <div class="header-right">
+      <span class="welcome-text" id="welcomeText"></span>
+      <button class="logout-btn" id="logoutBtn">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="sidebar" id="sidebar">
+      <a href="/admin_dashboard.html" class="menu-item">수업 모니터링</a>
+      <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
+      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
+      <a href="/course_manage.html" class="menu-item">과정 관리</a>
+    </div>
+
+    <div class="main-content">
+      <div class="container">
+
+        <div class="top-controls">
+          <div class="page-title" id="pageTitle">개인 집중도 리포트</div>
+          <div class="btn-group">
+            <button class="action-btn btn-back" onclick="history.back()">⬅ 이전 페이지로</button>
+            <button class="action-btn btn-print" onclick="window.print()">🖨️ PDF 저장</button>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-section-title">👤 학생 데이터 요약</div>
+          <div class="info-grid">
+            <div class="info-row"><div class="info-label">이름</div><div class="info-value" id="stuName">-</div></div>
+            <div class="info-row"><div class="info-label">과정명</div><div class="info-value" id="stuCourse">-</div></div>
+            
+            <div class="info-row"><div class="info-label">일일 집중도</div><div class="info-value highlight-value" id="stuScore">- 점</div></div>
+            <div class="info-row"><div class="info-label">종합 등급</div><div class="info-value highlight-value" id="stuGrade" style="color:#007bff;">-</div></div>
+            
+            <div class="info-row" style="grid-column: 1 / -1;">
+              <div class="info-label" style="width: 120px;">이탈 횟수</div>
+              <div class="info-value bad-value" id="stuAbsences">- 회</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="info-section-title">🕒 일일 집중도 타임라인</div>
+          <div class="chart-wrapper">
+            <div id="noDataMsg" style="display:none; text-align:center; padding: 40px; color: #999;">해당 날짜의 타임라인 기록이 없습니다.</div>
+            <canvas id="focusTimelineChart"></canvas>
+          </div>
+        </div>
+
+        <div class="ai-comment-card">
+          <div class="ai-title">✨ AI 학습 분석 종합 코멘트</div>
+          <div class="ai-text" id="aiCommentText">데이터를 분석 중입니다...</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/student_report.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/student_report.js"></script>
+  
+  <script>
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { window.location.href = '/'; return; }
+      
+      const adminDoc = await UserCRUD.getUser(user.uid);
+      if (!adminDoc || adminDoc.role !== 'admin') { window.location.href = '/'; return; }
+      
+      document.getElementById('welcomeText').textContent = `${adminDoc.name}님 환영합니다`;
+      if (adminDoc.role === 'admin') document.getElementById('adminBadge').style.display = 'inline-block';
+      document.body.style.display = 'block';
+
+      // 1. URL 파라미터 확인
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetDate = urlParams.get('date');
+      const targetUid = urlParams.get('uid');
+
+      if (!targetUid || !targetDate) {
+          alert("잘못된 접근입니다.");
+          history.back();
+          return;
+      }
+  
+      // 제목 업데이트
+      const dateParts = targetDate.split('-');
+      document.getElementById('pageTitle').textContent = `[${dateParts[1]}/${dateParts[2]}] 개인 집중도 리포트`;
+
+      // 등급 계산 함수
+      function calculateGrade(score) {
+          if(score >= 90) return 'A';
+          if(score >= 80) return 'B';
+          if(score >= 70) return 'C';
+          return 'D';
+      }
+
+      // Rule-based AI 코멘트 생성 함수
+      function generateAIComment(name, score, absences) {
+          if (score === '-') return "데이터가 부족하여 분석할 수 없습니다.";
+          
+          let comment = "";
+          if (absences >= 3) {
+              comment = `${name} 학생은 오늘 총 ${absences}회의 자리 이탈이 감지되었습니다. 잦은 이탈은 전체적인 학습 흐름을 끊을 수 있으므로, 집중할 수 있는 학습 환경을 조성하거나 별도의 면담이 권장됩니다.`;
+          } else if (score >= 90) {
+              comment = `${name} 학생의 일일 집중도 점수는 ${score}점으로 매우 우수합니다! 수업 내내 최상의 집중력을 유지하며 모범적인 학습 태도를 보였습니다. 현재의 학습 패턴을 유지하는 것을 강력히 추천합니다.`;
+          } else if (score < 70) {
+              comment = `전반적인 집중도(${score}점)가 다소 낮게 측정되었습니다. 특정 시간대에 집중력이 하락하는 패턴이 관찰되므로, 피로가 누적되지 않도록 적절한 환기와 짧은 휴식을 취하는 것이 좋습니다.`;
+          } else {
+              comment = `${name} 학생은 안정적인 집중도를 유지하며 수업에 참여했습니다. 중간중간 가벼운 스트레칭을 병행한다면 더 높은 학습 효율을 기대할 수 있습니다.`;
+          }
+          return comment;
+      }
+
+      // 차트 그리기 함수
+      function renderChart(timelineScore) {
+        document.getElementById('noDataMsg').style.display = 'none';
+        document.getElementById('focusTimelineChart').style.display = 'block';
+
+        const MAX_POINTS = 20;
+        let sampledData = [];
+
+        if (timelineScore.length <= MAX_POINTS) {
+            sampledData = timelineScore;
+        } else {
+            const chunkSize = timelineScore.length / MAX_POINTS;
+            for (let i = 0; i < MAX_POINTS; i++) {
+                const start = Math.floor(i * chunkSize);
+                const end = Math.floor((i + 1) * chunkSize);
+                const chunk = timelineScore.slice(start, end);
+                const chunkAvg = Math.round(chunk.reduce((a, b) => a + b, 0) / chunk.length);
+                sampledData.push(chunkAvg);
+            }
+        }
+
+        const totalSeconds = timelineScore.length * 10;
+        const pointCount = sampledData.length;
+
+        function formatTime(seconds) {
+            if (seconds < 60) return `${seconds}초`;
+            if (seconds < 3600) {
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                return s === 0 ? `${m}분` : `${m}분${s}초`;
+            }
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return m === 0 ? `${h}시간` : `${h}시간${m}분`;
+        }
+
+        const labels = sampledData.map((_, i) => formatTime(Math.round(((i + 1) / pointCount) * totalSeconds)));
+
+        if (window._focusChart) window._focusChart.destroy();
+        const ctx = document.getElementById('focusTimelineChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(255, 119, 16, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 119, 16, 0.0)');
+
+        window._focusChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '집중도 (%)',
+                    data: sampledData,
+                    borderColor: '#FF7710',
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointBackgroundColor: 'white',
+                    pointBorderColor: '#FF7710',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: (value) => `${value}%` } },
+                    x: { grid: { display: false } }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+      }
+  
+      // 데이터 로드 로직
+      async function loadDetailData() {
+        // 1. 학생 기본 정보 세팅
+        const targetStudent = await UserCRUD.getUser(targetUid);
+        if(!targetStudent) { alert("학생 정보를 찾을 수 없습니다."); return; }
+
+        document.getElementById('stuName').textContent = targetStudent.name;
+        document.getElementById('stuCourse').textContent = targetStudent.courseName || '과정 미정';
+
+        // 2. 실시간 타임라인 데이터 먼저 가져오기 (StudentReportCRUD 활용)
+        const timelineScore = await StudentReportCRUD.getTimelineScore(targetUid, targetDate);
+
+        let totalScore = '-';
+        let absentCount = 0;
+
+        try {
+            // 3. 수업이 종료되어 최종 리포트가 있는지 확인
+            const dailyDoc = await db.collection('users').doc(targetUid).collection('daily_reports').doc(targetDate).get();
+            
+            if(dailyDoc.exists && dailyDoc.data().totalScore !== undefined) {
+                // [수업 종료 후] 확정된 DB 데이터 사용
+                totalScore = dailyDoc.data().totalScore;
+                absentCount = dailyDoc.data().absentCount ?? 0;
+            } else if (timelineScore && timelineScore.length > 0) {
+                // [수업 진행 중] 실시간 그래프 데이터로 즉석 계산
+                totalScore = Math.round(timelineScore.reduce((a,b)=>a+b,0)/timelineScore.length);
+                absentCount = timelineScore.filter(score => score === 0).length; 
+            }
+        } catch(e) { console.error(e); }
+
+        // 4. 화면에 값 뿌려주기
+        document.getElementById('stuScore').textContent = `${totalScore}${totalScore !== '-' ? ' 점' : ''}`;
+        document.getElementById('stuGrade').textContent = totalScore !== '-' ? calculateGrade(totalScore) : '-';
+        document.getElementById('stuAbsences').textContent = `${absentCount} 회`;
+
+        // 5. AI 코멘트 및 차트 렌더링
+        document.getElementById('aiCommentText').textContent = generateAIComment(targetStudent.name, totalScore, absentCount);
+
+        if (!timelineScore || timelineScore.length === 0) {
+            document.getElementById('noDataMsg').style.display = 'block';
+            document.getElementById('focusTimelineChart').style.display = 'none';
+            return;
+        }
+
+        renderChart(timelineScore);
+      }
+
+      loadDetailData();
+    });
+
+    document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+    });
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      auth.signOut().then(() => { window.location.href = '/'; });
+    });
+
+  </script>
+</body>
+</html>

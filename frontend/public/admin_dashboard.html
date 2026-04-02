@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>관리자 대시보드 - 멋쟁이사자처럼</title>
+  
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
+  <style>
+    /* 입력창은 드래그 */
+    input, textarea {
+      user-select: text;
+    }
+
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; color: #333; 
+        -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;}
+    header { width: 100%; padding: 15px 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+    .logo-area { display: flex; align-items: center; gap: 15px; }
+    .logo-text { color: #FF7710; font-size: 22px; font-weight: bold; }
+    .admin-badge { background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #555; }
+    .logout-btn { background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; }
+    
+    .container { display: flex; height: calc(100vh - 65px); }
+    
+    /* 🌟 왼쪽 사이드바 */
+    .sidebar { width: 200px; background: white; border-right: 1px solid #eee; padding: 20px 0; flex-shrink: 0; transition: width 0.3s ease; overflow: hidden; white-space: nowrap;}
+    .sidebar.collapsed {width: 10px; padding: 0;}
+    .menu-item { padding: 15px 20px; font-weight: bold; color: #555; cursor: pointer; transition: 0.2s; text-decoration: none; display: block; }
+    .menu-item:hover { background-color: #fffaf0; color: #FF7710; }
+    .menu-item.active { border-left: 4px solid #FF7710; color: #FF7710; background-color: #fffaf0; }
+
+    #sidebarToggleBtn { background: none; border: none; font-size: 20px; cursor: pointer; color: #555;}
+    .welcome-text { font-size: 13px; color: #888; }
+
+    .main-content { flex-grow: 1; padding: 40px; overflow-y: auto; }
+    .top-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .course-select { padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 16px; font-weight: bold; }
+    
+    /* ✅ 1단계 UI 미션: 리포트 자동 생성 버튼 디자인 */
+    .report-btn { padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; margin-right: 10px; }
+    .report-btn:hover { background-color: #218838; }
+
+    .class-toggle-btn { padding: 10px 20px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; }
+    .class-toggle-btn.started { background-color: #dc3545; }
+
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    thead { background-color: #fcfcfc; border-bottom: 2px solid #eee; }
+    th, td { padding: 15px; text-align: center; border-bottom: 1px solid #eee; }
+    th { color: #777; font-size: 14px; }
+    tbody tr:hover { background-color: #f9f9f9; }
+    
+    .status-badge { padding: 5px 10px; border-radius: 12px; font-size: 13px; font-weight: bold; }
+    .status-focus { background-color: #d4edda; color: #155724; }
+    .status-drowsy {
+      background-color: #f8d7da;
+      color: #721c24;
+      animation: blink 1s infinite;
+      display: inline-block;
+    }
+    .row-drowsy { background-color: #fff3f3 !important; }
+    
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body style="display:none;">
+
+  <header>
+    <div class="logo-area">
+      <button id="sidebarToggleBtn">☰</button>
+      <div class="logo-text">멋쟁이사자처럼</div>
+      <div class="admin-badge">Admin</div>
+    </div>
+    <div class="header-right">
+      <span class="welcome-text" id="welcomeText"></span>
+      <button class="logout-btn" id="logoutBtn">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="sidebar" id="sidebar">
+      <a href="/admin_dashboard.html" class="menu-item active">수업 모니터링</a>
+      <a href="/month_result.html" class="menu-item">월간 결과 조회</a>
+      <a href="/course_timeline.html" class="menu-item">수업별 타임라인</a>
+      <a href="/course_manage.html" class="menu-item">과정 관리</a>
+    </div>  
+
+    <div class="main-content">
+      <div class="top-controls">
+        <select class="course-select" id="courseSelect"></select>
+        <div style="display: flex;">
+          <button class="report-btn" id="reportBtn">리포트 자동 생성</button>
+          <button class="class-toggle-btn" id="classToggleBtn">수업 시작</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>번호</th>
+            <th>이름</th>
+            <th>과정명</th>
+            <th>상태</th>
+            <th>집중도</th>
+            <th>이탈 횟수</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody id="student-table-body">
+          </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/admin_realtime.js"></script>
+  <script src="/js/models/course.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/admin_realtime.js"></script>
+  <script src="/js/crud/course.js"></script>
+  
+  <script>
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { window.location.href = '/'; return; }
+      
+      const userDoc = await UserCRUD.getUser(user.uid);
+      if (!userDoc || userDoc.role !== 'admin') { window.location.href = '/'; return; }
+
+      document.getElementById('welcomeText').textContent = `${userDoc.name}님 환영합니다`;
+      
+      document.body.style.display = 'block';
+
+      const today = new Date().toISOString().split('T')[0];
+      const tbody = document.getElementById('student-table-body');
+      const classToggleBtn = document.getElementById('classToggleBtn');
+      const reportBtn = document.getElementById('reportBtn');
+      let isClassStarted = false;
+      let hasClassStartedAdmin = false;
+      const courseId = userDoc.courseId;
+
+      const courseSelect = document.getElementById('courseSelect');
+      const courses = await CourseCRUD.getCourses();
+
+      // ✅ 2단계 UI 미션: '전체 보기' 옵션 동적 추가
+      const allOption = document.createElement('option');
+      allOption.value = '전체 보기';
+      allOption.textContent = '전체 보기';
+      courseSelect.appendChild(allOption);
+
+      courses.forEach(course => {
+        const option = document.createElement('option');
+        option.value = course.courseId;
+        option.textContent = course.courseName;
+        courseSelect.appendChild(option);
+      });
+
+      // ✅ 전체 학생 데이터를 담아둘 바구니 생성
+      let studentDataMap = {};
+
+      function renderTable() {
+          tbody.innerHTML = '';
+          const selectedCourse = courseSelect.value;
+          let filteredStudents = [];
+
+          if (selectedCourse === '전체 보기') {
+              Object.values(studentDataMap).forEach(list => {
+                  filteredStudents = filteredStudents.concat(list);
+              });
+          } else {
+              filteredStudents = studentDataMap[selectedCourse] || [];
+          }
+
+          if(filteredStudents.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="7" style="padding: 40px; color: #888;">현재 접속 중인 학생이 없습니다.</td></tr>';
+              return;
+          }
+
+          let count = 1;
+          filteredStudents.forEach((student) => {
+              const tr = document.createElement('tr');
+              let statusClass = 'status-badge';
+              if (student.status === '집중') statusClass += ' status-focus';
+              if (student.status) {
+                  const isCritical =
+                      student.status.includes('졸음') ||
+                      student.status.includes('이탈') ||
+                      student.status.includes('자리비움');
+
+                  if (isCritical) {
+                      statusClass += ' status-drowsy';
+                      tr.classList.add('row-drowsy');
+                  }
+              }
+  
+              tr.innerHTML = `
+                  <td>${count++}</td>
+                  <td style="font-weight: bold; color: #FF7710;">${student.name}</td>
+                  <td>${student.course}</td>
+                  <td><span class="${statusClass}">${student.status}</span></td>
+                  <td style="font-weight: bold;">${student.currentScore ?? ''}</td>
+                  <td style="color: #dc3545; font-weight: bold;">${student.absentCount ?? 0}회</td> <td><button style="border:1px solid #ddd; background:white; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="window.location.href='/month_result.html'">월별 기록</button></td>
+              `;
+              tbody.appendChild(tr);
+          });
+      }
+
+      // ✅ DB에 등록된 '모든 과정'을 한꺼번에 구독 (기존 subscribeStudents 대체)
+      courses.forEach(course => {
+          studentDataMap[course.courseId] = [];
+          RealtimeCRUD.subscribeRealtimeList(course.courseId, (list) => {
+              studentDataMap[course.courseId] = list; 
+              renderTable(); 
+          });
+      });
+
+      // 드롭다운 변경 시 UI & 모니터링 보드 업데이트
+      courseSelect.addEventListener('change', () => {
+        renderTable();
+        subscribeBoard(courseSelect.value);
+      });
+
+      const realtimeSnapshot = await db
+          .collection(COL_COURSES)
+          .doc(courseId)
+          .collection('realtime')
+          .get();
+
+      realtimeSnapshot.docs.forEach(async (doc) => {
+          const lastUpdated = doc.data().lastUpdated?.toDate();
+          if (!lastUpdated) return;
+          const lastDate = lastUpdated.toISOString().split('T')[0];
+          if (lastDate < today) {
+              await RealtimeCRUD.deleteStatus(courseId, doc.id);
+          }
+      });
+
+      let unsubscribeBoard = null;
+
+      function subscribeBoard(targetCourseId) {
+        if (unsubscribeBoard) unsubscribeBoard();
+
+        // ✅ '전체 보기' 일 땐 수업 시작 버튼 숨기기
+        if (targetCourseId === '전체 보기') {
+            classToggleBtn.style.display = 'none';
+            return;
+        }
+
+        classToggleBtn.style.display = 'inline-block';
+        unsubscribeBoard = db.collection(COL_COURSES).doc(targetCourseId)
+          .collection(COL_COURSES_TIMELINE).doc(today)
+          .onSnapshot((doc) => {
+            if (doc.exists) {
+              isClassStarted = doc.data().isStarted === true;
+
+
+              if (isClassStarted) {
+                classToggleBtn.textContent = '기록 종료';
+                classToggleBtn.classList.add('started');
+                hasClassStartedAdmin = true;
+
+                // ✅ 임시 리포트 버튼 : 기록 중엔 비활성화 
+                reportBtn.disabled = true;
+                reportBtn.style.cursor = 'not-allowed';
+
+              } else {
+                classToggleBtn.textContent = '기록 시작';
+                classToggleBtn.classList.remove('started');
+
+                  // ✅ 임시 리포트 버튼 : 한 번이라도 시작됐으면 활성화
+                if (hasClassStartedAdmin) {
+                  reportBtn.disabled = false;
+                  reportBtn.style.cursor = 'pointer';
+                }
+              }
+            } else {
+              isClassStarted = false;
+              classToggleBtn.textContent = '기록 시작';
+              classToggleBtn.classList.remove('started');
+            }
+          });
+      }
+
+      // 초기 세팅
+      subscribeBoard(courseSelect.value);
+
+      classToggleBtn.addEventListener('click', async () => {
+          const today = new Date().toISOString().split('T')[0];
+          const newState = !isClassStarted;
+          const selectedCourseId = courseSelect.value;
+
+          // const isCalc =  <- isCalculated만 조회
+          
+          if (selectedCourseId === '전체 보기') return; // 예방
+
+          await db.collection(COL_COURSES).doc(selectedCourseId)
+            .collection(COL_COURSES_TIMELINE).doc(today)
+            .set({ isStarted: newState }, { merge: true });
+          console.log('[ADMIN] 기록 ' + (newState ? '시작' : '종료'), { selectedCourseId, today });
+            
+          // if (!newState) { // 종료 시
+          //   // isStarted: false 와 flushStatus: 'waiting' 동시에 세팅
+          //   const realtimeSnap = await db.collection(COL_COURSES)
+          //     .doc(selectedCourseId).collection('realtime').get();
+              
+          //     await db.collection(COL_COURSES).doc(selectedCourseId)
+          //     .collection(COL_COURSES_TIMELINE).doc(today)
+          //     .set({ isStarted: false }, { merge: true });
+              
+          //     console.log('[ADMIN] 종료 클릭', { selectedCourseId, today, isClassStarted });
+            
+          // } else { // 시작 시
+          //   db.collection(COL_COURSES).doc(selectedCourseId)
+          //   .collection(COL_COURSES_TIMELINE).doc(today)
+          //   .set({ isStarted: true }, { merge: true });
+          // }
+      
+          });
+      
+            // ✅ 임시 리포트 버튼 : 이벤트
+            reportBtn.addEventListener('click', async () => {
+              const today = new Date().toISOString().split('T')[0];
+              const selectedCourseId = courseSelect.value;
+      
+              window.location.href = `/course_timeline.html?date=${today}`;
+            });
+        });
+        
+        // 사이드바 접기/펴기
+        document.getElementById('sidebarToggleBtn')
+          .addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+          });
+  </script>
+</body>
+</html>

@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>학생 대시보드 - 멋쟁이사자처럼</title>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+  <style>
+    body { margin: 0; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; align-items: center; height: 100vh; position: relative; }
+    header { width: 100%; padding: 20px; background: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 40px; }
+    .logo-text { color: #FF7710; font-size: 24px; font-weight: bold; }
+    .sub-text { color: #666; font-size: 14px; margin-top: 5px; }
+
+    #webcam-section { display: none; width: 80%; max-width: 800px; text-align: center; }
+    .welcome-msg { font-size: 20px; font-weight: bold; margin-bottom: 20px; color: #333; display: flex; justify-content: center; align-items: center; gap: 15px; }
+    .video-container { position: relative; width: 100%; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; }
+    .waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); color: white; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; z-index: 10; transition: opacity 0.5s ease; }
+    
+    #end-section { display: none; width: 100%; height: 50vh; justify-content: center; align-items: center; flex-direction: column; }
+    .end-msg { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 20px; }
+    .end-sub { color: #666; font-size: 16px; }
+
+    /* ✅ 추가: 은밀한 회원탈퇴 버튼 */
+    .withdraw-btn { position: absolute; bottom: 20px; right: 20px; background: none; border: none; color: #bbb; font-size: 12px; cursor: pointer; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-text">멋쟁이사자처럼</div>
+    <div class="sub-text">학습 집중도 분석 시스템</div>
+  </header>
+
+  <div id="webcam-section">
+    <div class="welcome-msg">
+      🦁 <span id="display-name"></span>님 환영합니다!
+      </div>
+    <div class="video-container">
+      <video id="webcam" autoplay playsinline muted></video>
+      <canvas id="output_canvas"></canvas>
+      <div class="waiting-overlay" id="waitingOverlay">수업이 시작될 때까지 대기해주세요 ⏳</div>
+    </div>
+  </div>
+
+  <div id="end-section">
+    <div class="end-msg">수업이 종료되었습니다.</div>
+    <div class="end-sub">오늘 하루도 고생 많으셨습니다! 창을 닫아주세요.</div>
+  </div>
+
+  <button class="withdraw-btn" id="withdrawBtn">회원 탈퇴</button>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/admin_realtime.js"></script>
+  <script src="/js/models/student_report.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/student_report.js"></script>
+  <script src="/js/crud/admin_realtime.js"></script>
+  <script src="/js/ai_logic.js"></script>
+
+
+  <script>
+    const exitBtn = document.getElementById('exitBtn');
+    const webcamSection = document.getElementById('webcam-section');
+    const endSection = document.getElementById('end-section');
+    const displayName = document.getElementById('display-name');
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const waitingOverlay = document.getElementById('waitingOverlay');
+
+    const remoteAttentionEngine = new RemoteAttentionEngine({
+      baseUrl: 'http://127.0.0.1:8000',
+      sessionId: `student-${Date.now()}`,
+      processScale: 0.75,
+      refineLandmarks: true,
+      detectionConfidence: 0.5,
+      trackingConfidence: 0.5,
+      enableDefenseModel: true,
+    });
+
+    let currentUser = null;
+    let isClassStarted = false;
+    let aiInterval = null;
+    let userDoc = null;
+    let realtimeStatus = null;
+    let sessionScores = [];
+    let continuousFail = 0; 
+
+    let collectInterval = null; // 10초마다 수집
+    let timelineInterval = null; // 1분마다 DB 갱신
+    let classStartTime = null;
+    let updateTimeLine = [];
+
+    let latestAttentionState = new RemoteAttentionState();
+    let isRemoteAnalyzing = false;
+    // ===== write 최적화 상태 =====
+    let lastSentStatus = null;      // 마지막 전송된 상태 스냅샷
+    let lastWriteTs = 0;            // 마지막 write 시각(ms)
+    const MIN_WRITE_INTERVAL_MS = 3000; // 최소 write 간격 (3초)
+    const FRONT_MESH_INTERVAL_MS = 500;      // 프론트 mesh 시각화용
+    const SERVER_ANALYZE_INTERVAL_MS = 100;   // 서버 분석용 (약 10fps) , 67ms는 약 15fps에 해당하지만, 서버 부하 고려하여 100ms로 설정
+    const SERVER_ANALYZE_FPS = 1000 / SERVER_ANALYZE_INTERVAL_MS;
+    let serverAnalyzeInterval = null;
+
+    // ✅ 변경: 경과시간 기반 → 인덱스(카운터) 기반으로 교체. toHHMMSS는 포맷터 역할만 유지
+    function toHHMMSS(seconds) {
+      const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0'); // ✅ '00' → '0' 버그 수정
+      const s = String(seconds % 60).padStart(2, '0');                       // ✅ '00' → '0' 버그 수정
+      return `${h}:${m}:${s}`;
+    }
+
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(async (results) => {
+      console.log('[onResults]', {
+        readyState: videoElement.readyState,
+        isClassStarted,
+        sessionLen: sessionScores.length
+      });
+
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // 얼굴 랜드마크가 있을 경우만 시각화
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+        drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {
+          color: '#C0C0C070',
+          lineWidth: 1,
+        });
+      }
+
+      const attentionState = latestAttentionState;
+
+      // calibration 상태일 때 안내 메시지 변경
+      if (isClassStarted) {
+        if (attentionState.state === 'CALIBRATING') {
+          waitingOverlay.style.display = 'flex';
+          waitingOverlay.style.opacity = '1';
+
+          const calibMsg = attentionState.eye_status_msg || '';
+          
+          if (calibMsg.includes('Calibrating')) {
+            waitingOverlay.textContent = `눈 인식중입니다. 정면을 바라봐주세요. (${calibMsg})`;
+          } else {
+            waitingOverlay.textContent = '눈 인식중입니다. 정면을 바라봐주세요.';
+          }
+        } else {
+          waitingOverlay.style.opacity = '0';
+          setTimeout(() => {
+            waitingOverlay.style.display = 'none';
+          }, 300);
+        }
+      }
+
+      if (
+        isClassStarted &&
+        Number.isFinite(attentionState.score) &&
+        attentionState.state !== 'CALIBRATING'
+      ) {
+        sessionScores.push(attentionState.score);
+      }
+
+      if (realtimeStatus && isClassStarted) {
+        let statusKOR = '대기중';
+        if (attentionState.state === 'CALIBRATING') statusKOR = '눈 인식 중...';
+        else if (attentionState.state === 'FOCUSED') statusKOR = '집중';
+        else if (attentionState.state === 'PARTIAL_FOCUS') statusKOR = '집중 저하';
+        else if (attentionState.state === 'LOST_FOCUS') statusKOR = '🚨 이탈 🚨';
+        else if (attentionState.state === 'ABSENT') statusKOR = '🚨 자리비움 🚨';
+        else if (attentionState.state === 'DROWSY') statusKOR = '🚨 졸음 🚨';
+
+        const displayScore = sessionScores.length > 0
+          ? Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length)
+          : 0;
+
+        const nextPayload = {
+          status: statusKOR,
+          currentScore: displayScore,
+          absentCount: attentionState.absent_count ?? 0,
+        };
+
+        const now = Date.now();
+
+        // 상태 변경 감지
+        const isChanged =
+          !lastSentStatus ||
+          lastSentStatus.status !== nextPayload.status ||
+          lastSentStatus.currentScore !== nextPayload.currentScore ||
+          lastSentStatus.absentCount !== nextPayload.absentCount;
+
+        // 위험 상태는 즉시 반영
+        const isCritical = ['🚨 졸음 🚨', '🚨 이탈 🚨', '🚨 자리비움 🚨'].includes(nextPayload.status);
+
+        // write 조건
+        const shouldWrite =
+          isCritical ||
+          (isChanged && (now - lastWriteTs > MIN_WRITE_INTERVAL_MS));
+
+        if (shouldWrite) {
+          realtimeStatus.status = nextPayload.status;
+          realtimeStatus.currentScore = nextPayload.currentScore;
+          realtimeStatus.absentCount = nextPayload.absentCount;
+
+          await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+
+          lastSentStatus = nextPayload;
+          lastWriteTs = now;
+
+          console.log('[WRITE]', nextPayload);
+        }
+      }
+
+      canvasCtx.restore();
+    });
+        
+    let today = new Date().toISOString().split('T')[0];  
+
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        window.location.href = '/';
+        return;
+      }
+
+      userDoc = await UserCRUD.getUser(user.uid);
+      if (!userDoc) {
+        window.location.href = '/';
+        return;
+      }
+      if (userDoc.role !== 'student') {
+        window.location.href = '/admin_dashboard.html';
+        return;
+      }
+
+      console.log('[AUTH]', { user: user.uid, userDoc });
+
+      displayName.textContent = userDoc.name;
+      webcamSection.style.display = 'block';
+      currentUser = user;
+
+      // 회웥 탈퇴
+      const withdrawBtn = document.getElementById('withdrawBtn');
+
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', async () => {
+          const confirmDelete = confirm("정말 탈퇴하시겠습니까? 과정 중 탈퇴 시 불이익을 받을 수 있습니다.");
+
+          if (!confirmDelete) return;
+
+          try {
+            const uid = currentUser.uid;
+
+            // 1️. realtime 제거
+            if (realtimeStatus && userDoc) {
+              await db.collection(COL_COURSES).doc(userDoc.courseId)
+                .collection('realtime').doc(uid)
+                .delete();
+            }
+
+            // 2️. Firestore 유저 데이터 삭제
+            const isDeleted = await UserCRUD.deleteUser(uid);
+            if (!isDeleted) throw new Error("Firestore 삭제 실패");
+
+            // 3️. Firebase Auth 계정 삭제 (중요)
+            await currentUser.delete();
+
+            alert("회원 탈퇴가 완료되었습니다.");
+
+            // 4️. 홈으로 이동
+            window.location.href = '/';
+
+          } catch (error) {
+            console.error("회원 탈퇴 실패:", error);
+            alert("탈퇴 중 오류가 발생했습니다.");
+          }
+        });
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoElement.srcObject = stream;
+      } catch (err) {
+        alert('웹캠 권한 허용 필수!');
+        return;
+      }
+
+      realtimeStatus = new Realtime(user.uid, userDoc.name, userDoc.courseName, '대기중', null, 0);
+      await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+
+      let isFaceProcessing = false;
+      aiInterval = setInterval(async () => {
+        if (videoElement.readyState >= 2 && isClassStarted && !isFaceProcessing) {
+          isFaceProcessing = true;
+          try {
+            await faceMesh.send({ image: videoElement });
+          } catch (e) {
+            console.error('[faceMesh.send] failed', e);
+          }
+          isFaceProcessing = false;
+        }
+      }, FRONT_MESH_INTERVAL_MS); // 프론트 mesh 시각화는 기존 2fps 유지
+
+      serverAnalyzeInterval = setInterval(async () => {
+        if (videoElement.readyState >= 2 && isClassStarted && !isRemoteAnalyzing) {
+          isRemoteAnalyzing = true;
+          try {
+            const state = await remoteAttentionEngine.analyzeFrame(videoElement, SERVER_ANALYZE_FPS);
+            latestAttentionState = state;
+            console.log('[RemoteAttentionState]', state);
+          } catch (err) {
+            console.error('[AI ERROR] analyzeFrame failed', err);
+          } finally {
+            isRemoteAnalyzing = false;
+          }
+        }
+      }, SERVER_ANALYZE_INTERVAL_MS); // 서버 분석은 별도 약 10fps로 분리
+
+      let hasClassStarted = false; 
+
+      const today = new Date().toISOString().split('T')[0];
+      db.collection(COL_COURSES).doc(userDoc.courseId)
+        .collection(COL_COURSES_TIMELINE).doc(today)
+        .onSnapshot(async (doc) => {
+          console.log('[SNAPSHOT]', {
+            exists: doc.exists,
+            data: doc.exists ? doc.data() : null,
+            isClassStartedBefore: isClassStarted,
+            hasClassStarted
+          });
+
+          if (doc.exists) {
+            isClassStarted = doc.data().isStarted === true;
+            if (isClassStarted) {
+              hasClassStarted = true;
+              // ✅ 변경: 수업 시작 시간 최초 1회 세팅
+              classStartTime = classStartTime ?? new Date();
+              waitingOverlay.style.opacity = '0';
+              setTimeout(() => {
+                waitingOverlay.style.display = 'none';
+              }, 500);
+
+              // ✅ 변경: 15초 후 초기값(00:00:00) 1회 저장
+              setTimeout(async () => {
+                if (!isClassStarted || sessionScores.length === 0) return;
+                const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+                updateTimeLine.push(avg);
+                await db.collection('users').doc(currentUser.uid)
+                  .collection('daily_timeline').doc(today)
+                  .set({
+                      timelineScore: firebase.firestore.FieldValue.arrayUnion(...updateTimeLine)
+                  }, { merge: true });
+              }, 10000);
+
+            } else {
+              waitingOverlay.style.display = 'flex';
+              setTimeout(() => {
+                waitingOverlay.style.opacity = '1';
+              }, 10);
+              realtimeStatus.status = '대기중';
+              realtimeStatus.currentScore = null;
+              RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+
+              if (hasClassStarted) { 
+                await finalizeSession({
+                  userId: currentUser?.uid,
+                  courseId: userDoc?.courseId,
+                  today,
+                  userDoc,
+                  realtimeStatus,
+                  sessionScores
+                });
+
+                // ✅ 수업 종료 시 종료 화면 표시
+                webcamSection.style.display = 'none';
+                waitingOverlay.style.display = 'none';
+                endSection.style.display = 'flex';
+
+                hasClassStarted = false; 
+                isClassStarted = false; 
+                sessionScores = [];
+                updateTimeLine = [];
+                // ✅ 변경: classStartTime 리셋
+                classStartTime = null;
+                // ✅ 변경: 카운터 리셋 (다음 수업 세션을 위해)
+                isRemoteAnalyzing = false;
+                latestAttentionState = new RemoteAttentionState();
+                continuousFail = 0;
+              }
+            }
+          }
+        
+          console.log('[SNAPSHOT] after set', {
+            isClassStarted,
+            hasClassStarted
+          });
+        });
+
+      console.log('[MINUTE BEFORE SAVE]', sessionScores.length);
+
+      // 10초마다 수집
+      collectInterval = setInterval(() => {
+          if (!isClassStarted || sessionScores.length === 0) return;
+          const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+          updateTimeLine.push(avg);
+          sessionScores = [];
+          console.log('[COLLECT] 10초 수집 →', avg, '| 버퍼:', updateTimeLine.length);
+      }, 10000);
+
+      // 1분씩 db 업로드
+      timelineInterval = setInterval(async () => {
+        if (!isClassStarted || updateTimeLine.length === 0) return;
+
+        try {
+          await db.collection('users').doc(currentUser.uid)
+            .collection('daily_timeline').doc(today)
+            .set({
+                timelineScore: firebase.firestore.FieldValue.arrayUnion(...updateTimeLine)
+            }, { merge: true });
+
+            console.log('[UPLOAD] 1분 업로드 완료', updateTimeLine);
+            updateTimeLine = [];  // ✅ 버퍼 비우기
+            continuousFail = 0;
+        } catch (e) {
+          continuousFail += 1;
+          console.error('[TIMELINE] 저장 실패', e);
+          if (continuousFail >= 3) {
+            alert('네트워크 연결이 불안정합니다. 인터넷 연결을 확인해주세요.');
+            if (realtimeStatus) {
+              realtimeStatus.status = 'N/A';
+              realtimeStatus.currentScore = null;
+              await RealtimeCRUD.updateStatus(userDoc.courseId, realtimeStatus);
+            }
+            clearInterval(collectInterval);
+            clearInterval(timelineInterval);
+            clearInterval(aiInterval);
+            clearInterval(serverAnalyzeInterval);
+            waitingOverlay.style.display = 'flex';
+            waitingOverlay.style.opacity = '1';
+            waitingOverlay.textContent = '네트워크 오류로 분석이 중단되었습니다. 새로고침이 필요합니다. 🔌';
+          }
+        }
+      }, 60000);
+
+    });
+
+    async function finalizeSession({ userId, courseId, today, userDoc, realtimeStatus, sessionScores }) {
+      console.log('[FINALIZE ENTER]', {
+        userId,
+        courseId,
+        today,
+        sessionScoresLen: sessionScores.length
+      });
+
+      // ✅ 변경: 마지막 1분 미만 구간 flush
+      if (sessionScores.length > 0 && classStartTime) {
+        const avg = Math.round(sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length);
+        updateTimeLine.push(avg);
+        sessionScores = [];
+        await db.collection('users').doc(userId)
+          .collection('daily_timeline').doc(today)
+          .set({
+              timelineScore: firebase.firestore.FieldValue.arrayUnion(...updateTimeLine)
+          }, { merge: true });// ✅ 변경: scores → timelineScore
+        console.log('[FINALIZE] 마지막 flush →', avg);
+      }
+
+      // ✅ 변경: DailyTLCRUD 호출 제거, daily_report 저장만 유지
+      const timelineScore = await StudentReportCRUD.getTimelineScore(userId, today);
+      await StudentReportCRUD.createDailyReport(userId, today, userDoc, timelineScore, realtimeStatus?.absentCount ?? 0);
+
+      await db.collection(COL_COURSES).doc(courseId)
+        .collection(COL_COURSES_TIMELINE).doc(today)
+        .set({ completeStudents: firebase.firestore.FieldValue.arrayUnion(userId) }, { merge: true });
+
+      // ✅ aiInterval은 살려둠 (두 번째 수업에서도 계속 동작해야 함)
+      if (collectInterval) { clearInterval(collectInterval); collectInterval = null; }
+      if (timelineInterval) { clearInterval(timelineInterval); timelineInterval = null; }
+    }
+
+    // 브라우저 창을 닫으면 realtime 삭제
+    window.addEventListener('beforeunload', () => {
+        if (realtimeStatus && userDoc && currentUser) {
+            db.collection(COL_COURSES).doc(userDoc.courseId)
+              .collection('realtime').doc(currentUser.uid)
+              .delete();
+        }
+
+        if (aiInterval) clearInterval(aiInterval);
+        if (serverAnalyzeInterval) clearInterval(serverAnalyzeInterval);
+        if (collectInterval) clearInterval(collectInterval);
+        if (timelineInterval) clearInterval(timelineInterval);
+        // 웹캠 정지
+        if (videoElement.srcObject) {
+          videoElement.srcObject.getTracks().forEach(track => track.stop());
+        }
+    });
+
+    // ✅ 에러 방어: UI에서 버튼을 날렸기 때문에 if문으로 감싸서 안전하게 처리
+    if (exitBtn) {
+        exitBtn.addEventListener('click', async () => {
+          if (realtimeStatus && userDoc && currentUser) {
+            await db.collection(COL_COURSES).doc(userDoc.courseId)
+              .collection('realtime').doc(currentUser.uid)
+              .delete();
+          }
+          if (videoElement.srcObject) {
+            videoElement.srcObject.getTracks().forEach(track => track.stop());
+          }
+          webcamSection.style.display = 'none';
+          endSection.style.display = 'flex';
+        });
+    }
+  </script>
+</body>
+</html>

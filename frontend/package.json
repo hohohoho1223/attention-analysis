@@ -1,0 +1,22 @@
+{
+  "name": "helmo",
+  "version": "1.0.0",
+  "description": "사이드 임펙트 팀 웹사이트",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "build": "echo 'Build completed'",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "firebase-admin": "^13.5.0",
+    "pdfkit": "^0.17.2"
+  }
+}

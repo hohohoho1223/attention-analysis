@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>학습 집중도 분석 시스템</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  
+  <style>
+    body {
+      margin: 0; display: flex; justify-content: center; align-items: center;
+      height: 100vh; background-color: #f8f9fa; font-family: 'Malgun Gothic', sans-serif;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    /* 입력창은 예외 */
+    input, textarea {
+      user-select: text;
+    }
+
+    .login-container {
+      background: white; padding: 50px 40px; border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px;
+    }
+    .logo-text {
+      color: #FF7710; /* 멋쟁이사자처럼 시그니처 오렌지 */
+      font-size: 28px; font-weight: bold; margin-bottom: 10px;
+    }
+    .sub-text {
+      color: #666; font-size: 14px; margin-bottom: 40px;
+    }
+    .google-btn {
+      width: 100%; padding: 12px; background-color: white; border: 1px solid #ddd;
+      border-radius: 6px; font-size: 15px; font-weight: bold; color: #333;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: background 0.2s;
+    }
+    .google-btn:hover { background-color: #f1f1f1; }
+    
+    #input-section { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); text-align: center; width: 350px; z-index: 10; position: relative;}
+    .input-group { margin-bottom: 20px; text-align: left; }
+    .input-group label { display: block; font-size: 13px; color: #555; margin-bottom: 8px; }
+    .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+    .submit-btn { width: 100%; padding: 12px; background-color: #FF7710; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .submit-btn:hover { background-color: #e66a00; }
+    
+  </style>
+</head>
+<body>
+
+  <div class="login-container" id="login-section">
+    <div class="logo-text">멋쟁이사자처럼</div>
+    <div class="sub-text">학습 집중도 분석 시스템</div>
+    
+    <button class="google-btn" id="googleLoginBtn">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20">
+      구글 로그인
+    </button>
+  </div>
+
+    <div class="login-container" id="input-section" style="display:none;">
+      <div class="input-group">
+        <label>이름</label>
+        <input type="text" id="studentName" placeholder="홍길동">
+      </div>
+      <div class="input-group">
+        <label>과정명</label>
+        <select id="courseName">과정목록</select>
+      </div>
+      <button class="submit-btn" id="submitBtn">수업 입장하기</button>
+    </div>
+
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/models/user.js"></script>
+  <script src="/js/models/course.js"></script>
+  <script src="/js/crud/user.js"></script>
+  <script src="/js/crud/course.js"></script>
+  
+  <script>
+    const submitBtn = document.getElementById('submitBtn');
+    const loginSection = document.getElementById('login-section');
+    const inputSection = document.getElementById('input-section'); // 학생일 시 이름/과정명 입력
+    let currentUser = null; // user 저장용
+
+    auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+      .catch((error) => {
+        console.error('persistence 설정 실패:', error);
+      });
+
+    // 🌟 로그인 및 관리자/학생 권한 분기 로직
+    document.getElementById('googleLoginBtn').addEventListener('click', () => {
+      googleProvider.setCustomParameters({ prompt: 'select_account' });
+      auth.signInWithPopup(googleProvider)
+        .then(async (result) => {
+          currentUser = result.user;
+          console.log("로그인 성공:", currentUser.email);
+
+          const userDoc = await UserCRUD.getUser(currentUser.uid);
+          console.log("userDoc:", userDoc); // ← CRUD 작동 확인용
+
+          if (!userDoc) {
+            const courseSelect = document.getElementById('courseName');
+            let courses = await CourseCRUD.getCourses();
+
+            if (!courses || courses.length === 0) {
+              console.log("course 없음 → 미정 생성");
+              await CourseCRUD.addCourse("미정", "system");
+                courses = await CourseCRUD.getCourses();
+              } else if (courses.length === 1 && courses[0].courseName === "미정") {
+                console.log("미정만 존재 → 그대로 사용");
+              } else {
+                courses = courses.filter(course => course.courseName !== "미정");
+              }
+            
+            // 과정 선택 드롭다운을 초기화해서, 기존 옵션을 지운 뒤 최신 과정 목록만 다시 넣기 위한 코드입니다.
+            courseSelect.innerHTML = '';
+
+            courses.forEach(course => {
+              const option = document.createElement('option');
+              option.value = course.courseId;
+              option.textContent = course.courseName;
+              courseSelect.appendChild(option);
+            });
+
+          
+
+            loginSection.style.display = 'none';
+            inputSection.style.display = 'block';
+          } else if (userDoc.role === 'admin') {
+            // 알림창 없이 조용히 관리자 페이지로 이동
+            window.location.href = '/admin_dashboard.html';
+          } else {
+            // 알림창 없이 조용히 학생 페이지로 이동
+            window.location.href = '/student_dashboard.html';
+          }
+        })
+        .catch((error) => {
+          console.error("로그인 에러:", error);
+          alert("구글 로그인에 실패했습니다.");
+        });
+    });
+
+    // submitBtn 로직
+    submitBtn.addEventListener('click', async () => {
+      console.log("submitBtn 클릭됨");
+
+      const name = document.getElementById('studentName').value.trim();
+      const courseSelect = document.getElementById('courseName');
+      const courseId = courseSelect.value;
+      const courseName = courseSelect.options[courseSelect.selectedIndex].textContent;
+
+      if (!name) { alert('이름을 입력해주세요!'); return; }
+
+      const newUser = new User(currentUser.uid, currentUser.email, name, courseId, courseName, 'student');
+      const success = await UserCRUD.createUser(newUser);
+      console.log("createUser 결과:", success);
+
+      if (success) {
+        window.location.href = '/student_dashboard.html';
+      } else {
+        alert("저장에 실패했습니다. 다시 시도해주세요.");
+      }
+      });
+  </script>
+</body>
+</html>

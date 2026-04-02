@@ -1,0 +1,341 @@
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    background: #f8f9fa;
+    color: #333;
+}
+
+/* 상단 로고 */
+header {
+    text-align: center;
+    padding: 20px;
+}
+
+a{
+    text-decoration: none;
+}
+
+header h1 {
+    font-size: 28px;
+    margin: 0;
+    color: #007bff;
+}
+
+/* 안내 문구 */
+.notice {
+    max-width: 800px;
+    margin: 0 auto 20px auto;
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+    color: #444;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+/* 달력 */
+.calendar {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    font-weight: bold;
+}
+
+.calendar-header button {
+    border: none;
+    background: none;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    gap: 8px;
+}
+
+.calendar-grid div {
+    padding: 25px 0;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.calendar-grid div:hover {
+    background: #aee8fa;
+}
+
+.calendar-grid .selected {
+    background: #00a2ff;
+    color: white;
+    font-weight: bold;
+}
+
+/* 기록 카드 */
+.cards {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    max-width: 1000px;
+    margin: 25px auto;
+}
+
+.card {
+    flex: 1;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: left;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    min-height: 120px;
+}
+
+.card h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.card .date {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 12px;
+}
+
+.card .content {
+    font-size: 14px;
+    color: #444;
+}
+
+/* 요일 색상 */
+.weekday {
+    font-weight: bold;
+}
+
+.sunday {
+    color: red;
+}
+
+.saturday {
+    color: blue;
+}
+
+/* 날짜 hover 효과 */
+.day {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+/* .day:hover {
+    background-color: #e3f2fd;
+    transform: scale(1.05);
+} */
+
+/* 날짜 hover 시 나타나는 버튼들 */
+.day-buttons {
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    border-radius: 8px;
+    background-color: transparent;
+    z-index: 10;
+    white-space: nowrap;
+}
+
+.day:hover .day-buttons {
+    display: flex;
+    gap: 5px;
+    flex-direction: column;
+}
+
+.day-btn {
+    padding: 4px 8px;
+    color: white;
+    border: none;
+    border-radius: 15px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+/* .day-btn:hover {
+    background: #0056b3;
+} */
+
+.day-btn.record {
+    background: #ffffff;
+    color: #007bff;
+}
+
+.day-btn.record:hover {
+    background: #007bff;
+    color: #ffffff;
+}
+
+.day-btn.view {
+    background: #ffffff;
+    color: #007bff;
+}
+
+.day-btn.view:hover {
+    background: #007bff;
+    color: #ffffff;
+}
+
+/* 햄버거 메뉴 버튼 */
+.hamburger-menu {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    background: #007bff;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0,123,255,0.3);
+    transition: all 0.3s ease;
+}
+
+.hamburger-menu:hover {
+    background: #0056b3;
+    transform: scale(1.05);
+}
+
+.hamburger-icon {
+    display: flex;
+    flex-direction: column;
+    width: 20px;
+    height: 15px;
+    justify-content: space-between;
+}
+
+.hamburger-icon span {
+    width: 100%;
+    height: 2px;
+    background: white;
+    border-radius: 1px;
+    transition: all 0.3s ease;
+}
+
+/* 사이드바 */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    width: 300px;
+    height: 100vh;
+    background: #fff;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    z-index: 1001;
+    transition: left 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar.active {
+    left: 0;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.sidebar-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background: #e9ecef;
+    color: #333;
+}
+
+.sidebar-content {
+    flex: 1;
+    padding: 20px 0;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.menu-item:hover {
+    background: #f8f9fa;
+    border-left-color: #007bff;
+}
+
+.menu-icon {
+    font-size: 24px;
+    margin-right: 15px;
+    width: 30px;
+    text-align: center;
+}
+
+.menu-text {
+    font-size: 16px;
+    color: #333;
+    font-weight: 500;
+}
+
+/* 사이드바 오버레이 */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.sidebar-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
